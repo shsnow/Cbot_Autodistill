@@ -1,0 +1,21 @@
+# Requerimientos para la Herramienta Avanzada de Corrección de Etiquetado
+# Versión modular
+
+# Dash y componentes web
+dash==2.16.1
+dash-bootstrap-components==1.5.0
+
+# Procesamiento de imágenes
+Pillow>=9.0.0
+
+# Archivo de configuración
+PyYAML>=6.0
+
+# Utilidades científicas
+numpy>=1.21.0
+
+# Plotly para visualización interactiva
+plotly>=5.15.0
+
+# Otros
+pandas>=1.3.0  # opcional, para manejo de datos

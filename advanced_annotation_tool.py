@@ -15,14 +15,27 @@ from PIL import Image
 import io
 import cv2
 import numpy as np
+import yaml
 
 class AdvancedAnnotationTool:
-    def __init__(self, dataset_path="dataset_cruce_3"):
+    def __init__(self, dataset_path="dataset_cruce_3", classes_yaml="classes.yaml"):
         self.dataset_path = dataset_path
         self.images_path = os.path.join(dataset_path, "train", "images")
         self.labels_path = os.path.join(dataset_path, "train", "labels")
-        self.classes = ["vehículo"]  # Basado en tu ontología
+        
+        # Cargar clases desde YAML
+        self.classes_yaml_path = classes_yaml
+        self.classes = self.load_classes_from_yaml()
+        self.class_colors = self.load_colors_from_yaml()
+        
         self.current_image_index = 0
+        
+        # Sistema de deshacer (undo)
+        self.undo_stack = []
+        self.max_undo_steps = 20  # Máximo 20 pasos de undo
+        
+        # Variable para tracking de selección
+        self.selected_annotation_id = None
         
         # Verificar que los directorios existen
         if not os.path.exists(self.images_path):
@@ -37,6 +50,89 @@ class AdvancedAnnotationTool:
         self.app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])  # Tema oscuro
         self.setup_layout()
         self.setup_callbacks()
+    
+    def load_classes_from_yaml(self):
+        """Cargar clases desde archivo YAML"""
+        if not os.path.exists(self.classes_yaml_path):
+            print(f"⚠️ Archivo YAML no encontrado: {self.classes_yaml_path}")
+            print("🔄 Usando clases por defecto: ['vehículo']")
+            return ["vehículo"]
+        
+        try:
+            with open(self.classes_yaml_path, 'r', encoding='utf-8') as file:
+                yaml_data = yaml.safe_load(file)
+            
+            if 'names' in yaml_data:
+                # Convertir el diccionario names a una lista ordenada por índice
+                names_dict = yaml_data['names']
+                max_index = max(names_dict.keys()) if names_dict else 0
+                classes_list = [''] * (max_index + 1)
+                
+                for index, name in names_dict.items():
+                    classes_list[index] = name
+                
+                print(f"✅ Clases cargadas desde YAML: {classes_list}")
+                return classes_list
+            else:
+                print("⚠️ No se encontró la clave 'names' en el archivo YAML")
+                return ["vehículo"]
+                
+        except Exception as e:
+            print(f"❌ Error cargando clases desde YAML: {str(e)}")
+            print("🔄 Usando clases por defecto: ['vehículo']")
+            return ["vehículo"]
+    
+    def load_colors_from_yaml(self):
+        """Cargar colores personalizados desde archivo YAML"""
+        default_colors = ['#00d4aa', '#ff6b6b', '#4ecdc4', '#45b7d1', '#feca57', '#ff9ff3', '#54a0ff', '#9c88ff']
+        
+        if not os.path.exists(self.classes_yaml_path):
+            return default_colors
+        
+        try:
+            with open(self.classes_yaml_path, 'r', encoding='utf-8') as file:
+                yaml_data = yaml.safe_load(file)
+            
+            if 'colors' in yaml_data and yaml_data['colors']:
+                # Convertir RGB a hex
+                yaml_colors = []
+                for rgb in yaml_data['colors']:
+                    if len(rgb) == 3:
+                        hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+                        yaml_colors.append(hex_color)
+                    else:
+                        yaml_colors.append(default_colors[len(yaml_colors) % len(default_colors)])
+                
+                # Completar con colores por defecto si hay más clases que colores
+                while len(yaml_colors) < len(self.classes):
+                    yaml_colors.append(default_colors[len(yaml_colors) % len(default_colors)])
+                
+                return yaml_colors
+            else:
+                return default_colors
+                
+        except Exception as e:
+            print(f"⚠️ Error cargando colores desde YAML: {str(e)}")
+            return default_colors
+    
+    def push_undo_state(self, image_filename, annotations):
+        """Agregar estado al stack de undo"""
+        state = {
+            'image_filename': image_filename,
+            'annotations': [ann.copy() for ann in annotations]  # Deep copy
+        }
+        
+        self.undo_stack.append(state)
+        
+        # Limitar el tamaño del stack
+        if len(self.undo_stack) > self.max_undo_steps:
+            self.undo_stack.pop(0)
+    
+    def pop_undo_state(self):
+        """Recuperar último estado del stack de undo"""
+        if self.undo_stack:
+            return self.undo_stack.pop()
+        return None
     
     def load_image_annotations(self, image_filename):
         """Cargar anotaciones para una imagen específica"""
@@ -150,6 +246,9 @@ class AdvancedAnnotationTool:
             dcc.Store(id='selected-annotation', data=None),
             dcc.Store(id='keyboard-trigger', data=0),  # Para atajos de teclado
             
+            # Elemento invisible para el listener de teclado
+            html.Div(id="keyboard-listener", style={"display": "none"}),
+            
             # Header
             dbc.Row([
                 dbc.Col([
@@ -191,9 +290,13 @@ class AdvancedAnnotationTool:
                             html.Label("🛠️ Herramientas:", className="fw-bold mb-2", 
                                      style={"color": "#00d4aa", "font-family": "Arial Black"}),
                             dbc.ButtonGroup([
+                                dbc.Button("↶ Deshacer", id="undo-button", color="warning", size="sm", className="shadow-sm", title="Ctrl+Z"),
+                                dbc.Button("🗑️ Eliminar", id="delete-selected-button", color="danger", size="sm", className="shadow-sm", title="Delete/Supr"),
+                            ], className="w-100 mb-1"),
+                            dbc.ButtonGroup([
                                 dbc.Button("🗑️ Eliminar Frame", id="delete-frame-button", color="danger", size="sm", className="shadow-sm"),
                             ], className="w-100"),
-                            html.Small("� Dibuja para crear • Clic para editar", className="text-muted mt-1")
+                            html.Small("✏️ Dibuja para crear • Doble clic para editar", className="text-muted mt-1")
                         ], width=3),
                         
                         dbc.Col([
@@ -202,7 +305,7 @@ class AdvancedAnnotationTool:
                             dbc.ButtonGroup([
                                 dbc.Button(" Recargar", id="reload-button", color="info", size="sm", className="shadow-sm"),
                             ]),
-                            html.Small("⌨️ F=Siguiente • D=Anterior", className="text-muted mt-1")
+                            html.Small("⌨️ F=Siguiente • D=Anterior • Ctrl+Z=Deshacer • Del=Eliminar", className="text-muted mt-1")
                         ], width=3)
                     ])
                 ])
@@ -391,7 +494,7 @@ class AdvancedAnnotationTool:
         )
         
         # Agregar bounding boxes SOLO como shapes (no como trazas)
-        colors = ['#00d4aa', '#ff6b6b', '#4ecdc4', '#45b7d1', '#feca57', '#ff9ff3', '#54a0ff']
+        colors = self.class_colors
         shapes = []
         
         for i, ann in enumerate(annotations):
@@ -467,7 +570,7 @@ class AdvancedAnnotationTool:
         
         fig.update_layout(
             title=dict(
-                text=f"📸 {image_filename} ({img_width}×{img_height}) - ✏️ Dibuja para crear • Doble clic en caja para editar",
+                text=f"📸 {image_filename} ({img_width}×{img_height}) - ✏️ Dibuja para crear • Arrastra cajas para mover/redimensionar",
                 font=dict(size=16, color="#00d4aa", family="Arial Black")
             ),
             showlegend=False,
@@ -512,6 +615,20 @@ class AdvancedAnnotationTool:
                             const prevBtn = document.getElementById('prev-button');
                             if (prevBtn) {
                                 prevBtn.click();
+                                event.preventDefault();
+                            }
+                        } else if (event.ctrlKey && (event.key === 'z' || event.key === 'Z')) {
+                            // Ctrl+Z para deshacer
+                            const undoBtn = document.getElementById('undo-button');
+                            if (undoBtn) {
+                                undoBtn.click();
+                                event.preventDefault();
+                            }
+                        } else if (event.key === 'Delete' || event.key === 'Supr') {
+                            // Delete/Supr para eliminar anotación seleccionada
+                            const deleteBtn = document.getElementById('delete-selected-button');
+                            if (deleteBtn) {
+                                deleteBtn.click();
                                 event.preventDefault();
                             }
                         }
@@ -597,7 +714,7 @@ class AdvancedAnnotationTool:
         )
         def update_annotations_list(annotations):
             """Actualizar lista de anotaciones en el sidebar"""
-            colors = ['#00d4aa', '#ff6b6b', '#4ecdc4', '#45b7d1', '#feca57', '#ff9ff3', '#54a0ff']
+            colors = self.class_colors
             
             if not annotations:
                 return [
@@ -688,6 +805,9 @@ class AdvancedAnnotationTool:
                         if (x1 - x0) < 10 or (y1_img - y0_img) < 10:
                             return annotations, no_update, True, "⚠️ La caja es muy pequeña (mínimo 10x10 píxeles)"
                         
+                        # Guardar estado actual para undo ANTES de crear la nueva anotación
+                        self.push_undo_state(image_data['filename'], annotations)
+                        
                         # Convertir a coordenadas YOLO
                         x_center, y_center, width, height = self.pixel_to_yolo_coords(
                             x0, y0_img, x1, y1_img, img_dims['width'], img_dims['height']
@@ -760,6 +880,9 @@ class AdvancedAnnotationTool:
                         
                         # Solo guardar si algo cambió
                         if updated_annotations != annotations:
+                            # Guardar estado para undo ANTES de aplicar cambios
+                            self.push_undo_state(image_data['filename'], annotations)
+                            
                             # Guardar automáticamente
                             try:
                                 self.save_annotations(image_data['filename'], updated_annotations)
@@ -800,6 +923,9 @@ class AdvancedAnnotationTool:
                 return annotations, no_update, False, ""
             
             try:
+                # Guardar estado para undo ANTES de eliminar
+                self.push_undo_state(image_data['filename'], annotations)
+                
                 # Obtener el ID de la anotación a eliminar
                 triggered_prop_id = ctx.triggered[0]['prop_id']
                 
@@ -836,6 +962,110 @@ class AdvancedAnnotationTool:
                 return annotations, no_update, True, f"❌ Error eliminando anotación: {str(e)}"
             
             return annotations, no_update, False, ""
+        
+        @self.app.callback(
+            [Output('current-annotations', 'data', allow_duplicate=True),
+             Output('image-graph', 'figure', allow_duplicate=True),
+             Output('notification-toast', 'is_open', allow_duplicate=True),
+             Output('notification-toast', 'children', allow_duplicate=True)],
+            [Input('undo-button', 'n_clicks')],
+            [State('current-image-data', 'data'),
+             State('opacity-slider', 'value'),
+             State('display-options', 'value')],
+            prevent_initial_call=True
+        )
+        def undo_action(undo_clicks, image_data, opacity, display_options):
+            """Deshacer última acción"""
+            if not undo_clicks or not image_data:
+                return no_update, no_update, False, ""
+            
+            try:
+                # Recuperar estado anterior del stack de undo
+                previous_state = self.pop_undo_state()
+                if not previous_state:
+                    return no_update, no_update, True, "⚠️ No hay acciones para deshacer"
+                
+                # Verificar que sea para la imagen correcta
+                if previous_state['image_filename'] != image_data['filename']:
+                    # Si no es la misma imagen, devolver el estado al stack
+                    self.undo_stack.append(previous_state)
+                    return no_update, no_update, True, "⚠️ No hay acciones para deshacer en esta imagen"
+                
+                # Restaurar anotaciones
+                annotations = previous_state['annotations']
+                
+                # Regenerar figura
+                show_ids = 'show_ids' in (display_options or ['show_ids'])
+                show_coords = 'show_coords' in (display_options or [])
+                fig, _ = self.create_figure_with_annotations(
+                    image_data['filename'], annotations, opacity, show_ids, show_coords
+                )
+                
+                # Guardar automáticamente
+                try:
+                    self.save_annotations(image_data['filename'], annotations)
+                except Exception as save_error:
+                    print(f"Error guardando automáticamente: {save_error}")
+                
+                return annotations, fig, True, f"↶ Acción deshecha - {len(self.undo_stack)} deshacer restantes"
+                
+            except Exception as e:
+                return no_update, no_update, True, f"❌ Error deshaciendo: {str(e)}"
+        
+        @self.app.callback(
+            [Output('current-annotations', 'data', allow_duplicate=True),
+             Output('image-graph', 'figure', allow_duplicate=True),
+             Output('notification-toast', 'is_open', allow_duplicate=True),
+             Output('notification-toast', 'children', allow_duplicate=True)],
+            [Input('delete-selected-button', 'n_clicks')],
+            [State('current-annotations', 'data'),
+             State('selected-annotation', 'data'),
+             State('current-image-data', 'data'),
+             State('opacity-slider', 'value'),
+             State('display-options', 'value')],
+            prevent_initial_call=True
+        )
+        def delete_selected_annotation(delete_clicks, annotations, selected_id, image_data, opacity, display_options):
+            """Eliminar anotación seleccionada (primera en la lista si no hay selección específica)"""
+            if not delete_clicks or not annotations or not image_data:
+                return no_update, no_update, False, ""
+            
+            try:
+                # Guardar estado para undo antes de eliminar
+                self.push_undo_state(image_data['filename'], annotations)
+                
+                # Si no hay selección específica, eliminar la primera anotación
+                if selected_id is None:
+                    selected_id = 0
+                
+                # Filtrar anotaciones
+                original_count = len(annotations)
+                annotations = [ann for ann in annotations if ann['id'] != selected_id]
+                
+                # Reindexar IDs
+                for i, ann in enumerate(annotations):
+                    ann['id'] = i
+                
+                if len(annotations) < original_count:
+                    # Regenerar figura
+                    show_ids = 'show_ids' in (display_options or ['show_ids'])
+                    show_coords = 'show_coords' in (display_options or [])
+                    fig, _ = self.create_figure_with_annotations(
+                        image_data['filename'], annotations, opacity, show_ids, show_coords
+                    )
+                    
+                    # Guardar automáticamente
+                    try:
+                        self.save_annotations(image_data['filename'], annotations)
+                    except Exception as save_error:
+                        print(f"Error guardando automáticamente: {save_error}")
+                    
+                    return annotations, fig, True, f"🗑️ Anotación seleccionada eliminada - Guardado automático"
+                else:
+                    return no_update, no_update, True, "⚠️ No se encontró la anotación a eliminar"
+                
+            except Exception as e:
+                return no_update, no_update, True, f"❌ Error eliminando anotación seleccionada: {str(e)}"
         
         @self.app.callback(
             Output('stats-content', 'children'),
@@ -934,8 +1164,10 @@ class AdvancedAnnotationTool:
         """Ejecutar la aplicación"""
         print("🚀 Iniciando Herramienta Avanzada de Corrección de Etiquetado...")
         print(f"📁 Dataset: {self.dataset_path}")
-        print(f"🖼️ Imágenes encontradas: {len(self.image_files)}")
-        print(f"🏷️ Clases disponibles: {', '.join(self.classes)}")
+        print(f"� Archivo YAML de clases: {self.classes_yaml_path}")
+        print(f"�🖼️ Imágenes encontradas: {len(self.image_files)}")
+        print(f"🏷️ Clases disponibles ({len(self.classes)}): {', '.join(self.classes)}")
+        print(f"🎨 Colores personalizados: {'✅ Sí' if len(self.class_colors) == len(self.classes) else '❌ Por defecto'}")
         print(f"🌐 Servidor iniciando en: http://{host}:{port}")
         print("\n" + "="*60)
         print("💡 INSTRUCCIONES DE USO MEJORADAS:")
@@ -952,7 +1184,7 @@ class AdvancedAnnotationTool:
         print("  • Los cambios se guardan automáticamente")
         print("="*60)
         
-        self.app.run_server(debug=debug, port=port, host=host)
+        self.app.run(debug=debug, port=port, host=host)
 
 if __name__ == "__main__":
     try:
@@ -964,4 +1196,5 @@ if __name__ == "__main__":
         print("💡 Asegúrate de que:")
         print("  - El directorio dataset_cruce_3 existe")
         print("  - Hay imágenes en dataset_cruce_3/train/images/")
+        print("  - El archivo classes.yaml existe con las clases definidas")
         print("  - Las dependencias están instaladas (pip install -r requirements_annotation_tool.txt)")
