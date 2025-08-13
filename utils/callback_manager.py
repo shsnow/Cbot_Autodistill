@@ -467,6 +467,70 @@ class CallbackManager:
             traceback.print_exc()
             return annotations or [], no_update, True, f"❌ Error eliminando anotación: {str(e)}", None
     
+    def handle_delete_selected_annotation(self, delete_clicks, annotations, selected_id, 
+                                        image_data, opacity, display_options):
+        """Eliminar anotación seleccionada específicamente"""
+        print(f"DEBUG DELETE SELECTED: Clicks={delete_clicks}, Selected={selected_id}, Annotations={len(annotations or [])}")
+        
+        if not delete_clicks:
+            print("DEBUG DELETE SELECTED: No hay clicks, retornando")
+            return annotations or [], no_update, False, "", None
+            
+        if selected_id is None:
+            print("DEBUG DELETE SELECTED: No hay anotación seleccionada")
+            return annotations or [], no_update, True, "⚠️ Primero haz clic en una caja para seleccionarla", None
+        
+        try:
+            print(f"DEBUG DELETE SELECTED: Eliminando anotación seleccionada ID: {selected_id}")
+            print(f"DEBUG DELETE SELECTED: IDs disponibles: {[ann.get('id', 'sin-id') for ann in annotations]}")
+            
+            # Guardar estado para undo ANTES de eliminar
+            self.undo_manager.push_state(image_data['filename'], annotations)
+            
+            # Filtrar anotaciones (comparar como enteros)
+            original_count = len(annotations)
+            annotations_filtered = []
+            
+            for ann in annotations:
+                ann_id = ann.get('id', -1)
+                if ann_id != selected_id:
+                    annotations_filtered.append(ann)
+                else:
+                    print(f"DEBUG DELETE SELECTED: Eliminando anotación con ID {ann_id}")
+            
+            # Reindexar IDs
+            for i, ann in enumerate(annotations_filtered):
+                ann['id'] = i
+            
+            if len(annotations_filtered) < original_count:
+                print(f"DEBUG DELETE SELECTED: Anotación eliminada exitosamente. Quedan {len(annotations_filtered)} anotaciones")
+                
+                # Regenerar figura
+                show_ids = 'show_ids' in (display_options or ['show_ids'])
+                show_coords = 'show_coords' in (display_options or [])
+                fig, _ = self.figure_generator.create_figure_with_annotations(
+                    image_data['filename'], annotations_filtered, opacity, show_ids, show_coords
+                )
+                
+                # Guardar automáticamente
+                try:
+                    self.annotation_manager.save_annotations(image_data['filename'], annotations_filtered)
+                    print("DEBUG DELETE SELECTED: Guardado exitoso después de eliminar")
+                except Exception as save_error:
+                    print(f"ERROR DELETE SELECTED guardando automáticamente: {save_error}")
+                
+                # Limpiar la selección
+                return annotations_filtered, fig, True, f"🗑️ Anotación seleccionada eliminada - Guardado automático", None
+            else:
+                print("DEBUG DELETE SELECTED: No se pudo eliminar la anotación - no se encontró el ID")
+                return annotations, no_update, True, f"⚠️ No se encontró la anotación con ID {selected_id}", selected_id
+            
+        except Exception as e:
+            print(f"ERROR DELETE SELECTED eliminando anotación seleccionada: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return annotations or [], no_update, True, f"❌ Error eliminando anotación: {str(e)}", None
+    
     def handle_undo_action(self, undo_clicks, image_data, opacity, display_options):
         """Deshacer última acción"""
         if not undo_clicks or not image_data:
