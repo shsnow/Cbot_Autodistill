@@ -79,7 +79,7 @@ class FigureGenerator:
         """Crear shapes para las anotaciones"""
         shapes = []
         
-        for ann in annotations:
+        for idx, ann in enumerate(annotations):
             x_min, y_min, x_max, y_max = self.converter.yolo_to_pixel(ann, img_width, img_height)
             color = self.class_colors[ann['class_id'] % len(self.class_colors)]
             
@@ -91,8 +91,8 @@ class FigureGenerator:
             color_rgb = [int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)]
             fill_color = f"rgba({color_rgb[0]},{color_rgb[1]},{color_rgb[2]},{opacity})"
             
-            # Estilos especiales para la anotación seleccionada
-            if selected_id is not None and ann['id'] == selected_id:
+            # Estilos especiales para la anotación seleccionada (usar índice en lugar de ID)
+            if selected_id is not None and idx == selected_id:
                 line_width = 5  # Más grosor
                 line_color = "#ffff00"  # Amarillo brillante
                 fill_opacity = min(opacity + 0.3, 1.0)  # Más opacidad
@@ -108,7 +108,7 @@ class FigureGenerator:
                 line=dict(color=line_color, width=line_width),
                 fillcolor=fill_color,
                 editable=True,
-                name=f"bbox_{ann['id']}",
+                name=f"bbox_{idx}",  # Usar índice en lugar de ID
                 xref="x",
                 yref="y",
                 layer="above"
@@ -120,7 +120,7 @@ class FigureGenerator:
     def _add_text_annotations(self, fig, annotations, img_width, img_height, 
                             show_ids, show_coords):
         """Agregar etiquetas de texto a la figura"""
-        for ann in annotations:
+        for idx, ann in enumerate(annotations):
             if show_ids or show_coords:
                 x_min, y_min, x_max, y_max = self.converter.yolo_to_pixel(ann, img_width, img_height)
                 color = self.class_colors[ann['class_id'] % len(self.class_colors)]
@@ -130,7 +130,7 @@ class FigureGenerator:
                 
                 label_parts = []
                 if show_ids:
-                    label_parts.append(f"ID:{ann['id']}")
+                    label_parts.append(f"ID:{idx}")  # Usar índice en lugar de ann['id']
                 label_parts.append(ann['class_name'])
                 if show_coords:
                     label_parts.append(f"({ann['x_center']:.3f},{ann['y_center']:.3f})")

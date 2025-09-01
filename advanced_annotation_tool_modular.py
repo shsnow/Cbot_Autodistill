@@ -9,6 +9,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import json
 import os
+import re
 
 # Importar módulos locales
 from utils import (
@@ -295,43 +296,55 @@ class AdvancedAnnotationTool:
                     value=0, size="sm", className="mb-3"
                 ),
                 
-                # Sección para anotación seleccionada
-                html.Hr(className="my-3", style={"border-color": "#ffd700", "border-width": "2px"}),
+                # Sección para anotación seleccionada - MÁS PROMINENTE
+                html.Hr(className="my-3", style={"border-color": "#ffd700", "border-width": "3px"}),
                 dbc.Alert([
-                    html.H6("🎯 CAMBIAR CLASE DE ANOTACIÓN SELECCIONADA", 
-                           className="mb-2", style={"color": "#ffd700", "font-weight": "bold"}),
-                    html.Div(id="selected-info", className="mb-2", 
-                            style={"color": "#ffffff", "font-size": "1rem", "font-weight": "bold"}),
-                    html.Div([
-                        dbc.Row([
-                            dbc.Col([
-                                html.Label("Nueva clase:", className="mb-1", 
-                                         style={"color": "#ffd700", "font-weight": "bold"}),
-                                dbc.Select(
-                                    id="selected-class-selector",
-                                    options=[{"label": cls, "value": i} for i, cls in enumerate(self.classes)],
-                                    value=0, size="sm", disabled=True,
-                                    style={"font-weight": "bold"}
-                                )
-                            ], width=7),
-                            dbc.Col([
-                                html.Label(" ", className="mb-1"),  # Espaciador
-                                dbc.Button("✓ CAMBIAR", id="change-class-button", color="success", 
-                                         size="sm", disabled=True, 
-                                         title="Cambiar clase de la anotación seleccionada",
-                                         style={"font-weight": "bold", "width": "100%"})
-                            ], width=5)
-                        ])
-                    ], id="selected-controls", style={"display": "none"}),
-                    html.Small([
-                        "💡 ", html.Strong("Instrucciones:", style={"color": "#ffd700"}), html.Br(),
-                        "1. Haz clic en una caja para seleccionarla", html.Br(),
-                        "2. Elige la nueva clase en el selector", html.Br(),
-                        "3. Presiona '✓ CAMBIAR' para aplicar"
-                    ], className="mt-2", style={"color": "#adb5bd"})
+                    html.H5("🎯 CAMBIAR CLASE DE ANOTACIÓN SELECCIONADA", 
+                           className="mb-3", style={"color": "#ffd700", "font-weight": "bold", "text-align": "center"}),
+                    
+                    # Estado de selección prominente
+                    dbc.Alert(id="selected-info", color="info", className="mb-3 text-center", 
+                             style={"font-size": "1.1rem", "font-weight": "bold", "border": "2px solid #17a2b8"}),
+                    
+                    # Controles más grandes y visibles
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label("🔄 Nueva clase:", className="mb-2", 
+                                     style={"color": "#ffd700", "font-weight": "bold", "font-size": "1.1rem"}),
+                            dbc.Select(
+                                id="selected-class-selector",
+                                options=[{"label": f"🏷️ {cls}", "value": i} for i, cls in enumerate(self.classes)],
+                                value=0, size="lg", disabled=True,
+                                style={"font-weight": "bold", "font-size": "1rem"}
+                            )
+                        ], width=7),
+                        dbc.Col([
+                            html.Label("🚀 Acción:", className="mb-2", 
+                                     style={"color": "#ffd700", "font-weight": "bold", "font-size": "1.1rem"}),
+                            dbc.Button("✅ CAMBIAR AHORA", id="change-class-button", color="success", 
+                                     size="lg", disabled=True, 
+                                     title="Cambiar clase de la anotación seleccionada (selecciona una anotación primero)",
+                                     style={"font-weight": "bold", "width": "100%", "opacity": "0.6", "font-size": "1rem"})
+                        ], width=5)
+                    ], className="mb-3"),
+                    
+                    # Instrucciones mejoradas
+                    dbc.Alert([
+                        html.H6("📋 Múltiples formas de seleccionar:", className="mb-2", style={"color": "#856404"}),
+                        html.Ol([
+                            html.Li("🖱️ Haz clic en cualquier parte de una bounding box en la imagen"),
+                            html.Li("🎯 Presiona el botón '🎯' en la lista de anotaciones (panel derecho)"),
+                            html.Li("✏️ Arrastra/edita una bounding box (se selecciona automáticamente)"),
+                            html.Li("👀 Verás que se resalta en amarillo cuando esté seleccionada"),
+                            html.Li("🔄 Elige la nueva clase en el selector de arriba"),
+                            html.Li("✅ Presiona 'CAMBIAR AHORA' para aplicar"),
+                            html.Li("💾 El cambio se guarda automáticamente")
+                        ], style={"color": "#856404", "margin-bottom": "0"})
+                    ], color="warning", style={"background": "rgba(255,193,7,0.1)", "border": "1px solid #ffc107"})
+                    
                 ], color="warning", style={
-                    "background": "linear-gradient(135deg, rgba(255,215,0,0.1) 0%, rgba(255,215,0,0.05) 100%)", 
-                    "border": "2px solid #ffd700", "border-radius": "0.75rem"
+                    "background": "linear-gradient(135deg, rgba(255,215,0,0.15) 0%, rgba(255,215,0,0.08) 100%)", 
+                    "border": "3px solid #ffd700", "border-radius": "1rem", "padding": "1.5rem"
                 }),
                 html.Hr(className="my-2", style={"border-color": "#495057"}),
                 html.Label("Opacidad de las cajas:", className="mb-2", 
@@ -483,28 +496,84 @@ class AdvancedAnnotationTool:
     
     def _setup_interaction_callbacks(self):
         """Configurar callbacks de interacción"""
+        # Callback mejorado para detectar tanto edición como selección de bounding boxes
         @self.app.callback(
             [Output('current-annotations', 'data', allow_duplicate=True),
              Output('image-graph', 'figure', allow_duplicate=True),
              Output('notification-toast', 'is_open'),
-             Output('notification-toast', 'children')],
+             Output('notification-toast', 'children'),
+             Output('selected-annotation', 'data', allow_duplicate=True)],
             [Input('image-graph', 'relayoutData')],
             [State('current-annotations', 'data'),
              State('image-dimensions', 'data'),
              State('current-image-data', 'data'),
              State('class-selector', 'value'),
              State('opacity-slider', 'value'),
-             State('display-options', 'value')],
+             State('display-options', 'value'),
+             State('selected-annotation', 'data')],
             prevent_initial_call=True
         )
         def handle_shape_interaction(relayout_data, annotations, img_dims, image_data, 
-                                   selected_class, opacity, display_options):
-            return self.callback_manager.handle_shape_interaction(
+                                   selected_class, opacity, display_options, current_selected):
+            if not relayout_data or not annotations:
+                return dash.no_update, dash.no_update, False, "", dash.no_update
+            
+            print(f"DEBUG RELAYOUT: {relayout_data}")
+            
+            # PRIMERO: Manejar la edición normal (si hay cambios de coordenadas)
+            edit_result = self.callback_manager.handle_shape_interaction(
                 relayout_data, annotations, img_dims, image_data, 
                 selected_class, opacity, display_options
             )
+            
+            # Si hay cambios de edición, usar esos datos actualizados
+            if edit_result[0] != annotations:  # Si las anotaciones cambiaron
+                updated_annotations = edit_result[0]
+                updated_figure = edit_result[1]
+                toast_open = edit_result[2]
+                toast_message = edit_result[3]
+                print("DEBUG: Cambios de edición detectados y aplicados")
+            else:
+                # No hay cambios de edición, usar datos originales
+                updated_annotations = annotations
+                updated_figure = None
+                toast_open = False
+                toast_message = ""
+            
+            # SEGUNDO: Detectar selección de shapes
+            selected_annotation_idx = current_selected  # Mantener selección actual por defecto
+            selection_message = toast_message
+            
+            # Buscar si hay información de shapes en relayout_data para selección
+            for key, value in relayout_data.items():
+                if 'shapes[' in key and '].x0' in key:
+                    # Extraer el índice de la shape seleccionada
+                    match = re.search(r'shapes\[(\d+)\]', key)
+                    if match:
+                        shape_idx = int(match.group(1))
+                        if 0 <= shape_idx < len(updated_annotations):
+                            selected_annotation_idx = shape_idx
+                            class_name = updated_annotations[shape_idx].get('class_name', f"Clase {updated_annotations[shape_idx].get('class_id', 0)}")
+                            selection_message = f"🎯 Seleccionada: {class_name} (índice: {shape_idx})"
+                            print(f"DEBUG: Shape {shape_idx} seleccionada")
+                            break
+            
+            # Si hay selección nueva O cambios de edición, regenerar figura
+            if selected_annotation_idx != current_selected or updated_figure is None:
+                show_ids = 'show_ids' in (display_options or ['show_ids'])
+                show_coords = 'show_coords' in (display_options or [])
+                
+                current_image = image_data.get('filename', self.image_files[self.current_image_index])
+                final_figure, _ = self.figure_generator.create_figure_with_annotations(
+                    current_image, updated_annotations, opacity, show_ids, show_coords, selected_annotation_idx
+                )
+                
+                return updated_annotations, final_figure, toast_open or (selected_annotation_idx != current_selected), selection_message, selected_annotation_idx
+            
+            # Si no hay cambios, retornar lo que ya tenemos de la edición
+            return updated_annotations, updated_figure or dash.no_update, toast_open, selection_message, selected_annotation_idx
         
-        # Callback para detectar clics en cualquier parte de las bounding boxes
+        # Callback alternativo para detectar clics directos (cuando no hay edición)
         @self.app.callback(
             [Output('selected-annotation', 'data', allow_duplicate=True),
              Output('notification-toast', 'is_open', allow_duplicate=True),
@@ -514,38 +583,20 @@ class AdvancedAnnotationTool:
              State('image-dimensions', 'data')],
             prevent_initial_call=True
         )
-        def handle_shape_click(click_data, annotations, img_dims):
-            print(f"DEBUG CLICK CALLBACK INICIADO:")
-            print(f"  - click_data present: {click_data is not None}")
-            print(f"  - annotations count: {len(annotations or [])}")
-            print(f"  - img_dims present: {img_dims is not None}")
-            
-            if not click_data:
-                print("DEBUG CLICK: No hay click_data")
-                return None, False, ""
-                
-            if not annotations:
-                print("DEBUG CLICK: No hay anotaciones")
-                return None, False, ""
-                
-            if not img_dims:
-                print("DEBUG CLICK: No hay dimensiones de imagen")
-                return None, False, ""
+        def handle_direct_click(click_data, annotations, img_dims):
+            if not click_data or not annotations or not img_dims:
+                return dash.no_update, dash.no_update, dash.no_update
             
             try:
                 # Obtener coordenadas del clic
                 click_x = click_data['points'][0]['x']
                 click_y = click_data['points'][0]['y']
                 
-                print(f"DEBUG CLICK: Clic detectado en ({click_x:.1f}, {click_y:.1f})")
-                print(f"DEBUG CLICK: Dimensiones imagen: {img_dims}")
-                print(f"DEBUG CLICK: Total anotaciones: {len(annotations)}")
+                print(f"DEBUG DIRECT CLICK: Clic en ({click_x:.1f}, {click_y:.1f})")
                 
-                # Buscar qué anotación contiene este punto (de la más reciente a la más antigua)
+                # Buscar qué anotación contiene este punto
                 for i in reversed(range(len(annotations))):
                     ann = annotations[i]
-                    print(f"DEBUG CLICK: Verificando anotación {i}:")
-                    print(f"  - Datos: {ann}")
                     
                     # Convertir anotación YOLO a píxeles
                     x_center = ann['x_center'] * img_dims['width']
@@ -553,38 +604,24 @@ class AdvancedAnnotationTool:
                     width = ann['width'] * img_dims['width']
                     height = ann['height'] * img_dims['height']
                     
-                    print(f"  - Centro pixel: ({x_center:.1f}, {y_center:.1f})")
-                    print(f"  - Tamaño pixel: {width:.1f} x {height:.1f}")
-                    
-                    # Calcular límites de la caja (con margen generoso)
-                    margin = 15  # píxeles de margen para facilitar la selección
+                    # Calcular límites de la caja con margen
+                    margin = 10
                     x_min = x_center - width / 2 - margin
                     x_max = x_center + width / 2 + margin
-                    y_min = img_dims['height'] - (y_center + height / 2) - margin  # Plotly Y invertido
-                    y_max = img_dims['height'] - (y_center - height / 2) + margin  # Plotly Y invertido
+                    y_min = img_dims['height'] - (y_center + height / 2) - margin
+                    y_max = img_dims['height'] - (y_center - height / 2) + margin
                     
-                    print(f"  - Límites expandidos: x=[{x_min:.1f}, {x_max:.1f}], y=[{y_min:.1f}, {y_max:.1f}]")
-                    
-                    # Verificar si el clic está dentro de la caja
-                    inside_x = x_min <= click_x <= x_max
-                    inside_y = y_min <= click_y <= y_max
-                    print(f"  - Dentro X: {inside_x}, Dentro Y: {inside_y}")
-                    
-                    if inside_x and inside_y:
-                        print(f"DEBUG CLICK: ¡¡¡SELECCIONADA!!! anotación índice {i}")
-                        class_name = ann.get('class_name', f"Clase {ann.get('class_id', ann.get('class', 0))}")
-                        message = f"✅ Seleccionada: {class_name} (índice: {i})"
-                        print(f"DEBUG CLICK: Retornando selección: {i}")
+                    if x_min <= click_x <= x_max and y_min <= click_y <= y_max:
+                        class_name = ann.get('class_name', f"Clase {ann.get('class_id', 0)}")
+                        message = f"🎯 Seleccionada por clic: {class_name} (índice: {i})"
+                        print(f"DEBUG: Selección por clic directo - índice {i}")
                         return i, True, message
                 
-                print("DEBUG CLICK: Ninguna anotación contiene el clic")
-                return None, True, "⚠️ Clic fuera de las cajas - No hay selección"
+                return dash.no_update, False, ""
                 
             except Exception as e:
-                print(f"ERROR CLICK CALLBACK: {e}")
-                import traceback
-                traceback.print_exc()
-                return None, True, f"❌ Error en selección: {str(e)}"
+                print(f"ERROR en clic directo: {e}")
+                return dash.no_update, False, ""
         
         @self.app.callback(
             [Output('current-annotations', 'data', allow_duplicate=True),
@@ -605,14 +642,56 @@ class AdvancedAnnotationTool:
                 delete_clicks, annotations, selected_id, image_data, opacity, display_options
             )
         
+        # Callback para botones de selección en la lista de anotaciones
+        @self.app.callback(
+            [Output('selected-annotation', 'data', allow_duplicate=True),
+             Output('image-graph', 'figure', allow_duplicate=True),
+             Output('notification-toast', 'is_open', allow_duplicate=True),
+             Output('notification-toast', 'children', allow_duplicate=True)],
+            [Input({"type": "select-btn", "index": ALL}, "n_clicks")],
+            [State('current-annotations', 'data'),
+             State('current-image-data', 'data'),
+             State('opacity-slider', 'value'),
+             State('display-options', 'value')],
+            prevent_initial_call=True
+        )
+        def handle_annotation_selection(select_clicks, annotations, image_data, opacity, display_options):
+            if not any(select_clicks) or not annotations:
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            
+            # Encontrar qué botón fue presionado
+            triggered_id = ctx.triggered[0]['prop_id']
+            import json
+            button_info = json.loads(triggered_id.split('.')[0])
+            selected_idx = button_info['index']
+            
+            if 0 <= selected_idx < len(annotations):
+                # Regenerar figura con selección resaltada
+                show_ids = 'show_ids' in (display_options or ['show_ids'])
+                show_coords = 'show_coords' in (display_options or [])
+                current_image = image_data.get('filename', self.image_files[self.current_image_index])
+                
+                updated_figure, _ = self.figure_generator.create_figure_with_annotations(
+                    current_image, annotations, opacity, show_ids, show_coords, selected_idx
+                )
+                
+                class_name = annotations[selected_idx].get('class_name', f"Clase {annotations[selected_idx].get('class_id', 0)}")
+                message = f"🎯 Seleccionada desde lista: {class_name} (índice: {selected_idx})"
+                
+                print(f"DEBUG: Selección desde lista - índice {selected_idx}")
+                
+                return selected_idx, updated_figure, True, message
+            
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        
         # Callback para manejar información de anotación seleccionada
         @self.app.callback(
             [
                 Output('selected-info', 'children'),
-                Output('selected-controls', 'style'),
                 Output('selected-class-selector', 'disabled'),
                 Output('change-class-button', 'disabled'),
-                Output('selected-class-selector', 'value')
+                Output('selected-class-selector', 'value'),
+                Output('change-class-button', 'style')
             ],
             [
                 Input('selected-annotation', 'data'),
@@ -620,9 +699,12 @@ class AdvancedAnnotationTool:
             ]
         )
         def update_selected_info(selected_id, annotations):
+            button_style_disabled = {"font-weight": "bold", "width": "100%", "opacity": "0.6"}
+            button_style_enabled = {"font-weight": "bold", "width": "100%", "opacity": "1.0"}
+            
             if selected_id is None or not annotations:
-                return "Haz clic en una anotación para seleccionarla", \
-                       {"display": "none"}, True, True, 0
+                return "🔍 Haz clic en cualquier bounding box para seleccionar una anotación y cambiar su clase", \
+                       True, True, 0, button_style_disabled
             
             # Buscar la anotación seleccionada
             selected_ann = None
@@ -630,7 +712,7 @@ class AdvancedAnnotationTool:
                 selected_ann = annotations[selected_id]
             
             if selected_ann is None:
-                return "Anotación no encontrada", {"display": "none"}, True, True, 0
+                return "Anotación no encontrada", True, True, 0, button_style_disabled
             
             # Usar class_id o class dependiendo de lo que esté disponible
             class_idx = selected_ann.get('class_id', selected_ann.get('class', 0))
@@ -639,16 +721,18 @@ class AdvancedAnnotationTool:
             else:
                 class_name = f"Clase {class_idx}"
                 
-            info_text = f"Índice: {selected_id} | Clase: {class_name}"
+            info_text = f"🎯 ANOTACIÓN SELECCIONADA → Índice: {selected_id} | Clase actual: {class_name} | ✅ Listo para cambiar"
             
-            return info_text, {"display": "block"}, False, False, class_idx
+            return info_text, False, False, class_idx, button_style_enabled
 
         # Callback para cambiar la clase de la anotación seleccionada
         @self.app.callback(
             [
                 Output('current-annotations', 'data', allow_duplicate=True),
                 Output('image-graph', 'figure', allow_duplicate=True),
-                Output('selected-annotation', 'data', allow_duplicate=True)
+                Output('selected-annotation', 'data', allow_duplicate=True),
+                Output('notification-toast', 'is_open', allow_duplicate=True),
+                Output('notification-toast', 'children', allow_duplicate=True)
             ],
             Input('change-class-button', 'n_clicks'),
             [
@@ -656,13 +740,18 @@ class AdvancedAnnotationTool:
                 State('selected-class-selector', 'value'),
                 State('current-annotations', 'data'),
                 State('image-graph', 'figure'),
-                State('image-dimensions', 'data')
+                State('image-dimensions', 'data'),
+                State('opacity-slider', 'value'),
+                State('display-options', 'value')
             ],
             prevent_initial_call=True
         )
-        def change_selected_class(n_clicks, selected_id, new_class, annotations, figure, dims):
+        def change_selected_class(n_clicks, selected_id, new_class, annotations, figure, dims, opacity, display_options):
+            print(f"DEBUG CLASS CHANGE START: n_clicks={n_clicks}, selected_id={selected_id}, new_class={new_class} (type: {type(new_class)})")
+            
             if not n_clicks or selected_id is None or not annotations:
-                return dash.no_update, dash.no_update, dash.no_update
+                print("DEBUG CLASS CHANGE: Condiciones no cumplidas")
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
             
             try:
                 # Cambiar la clase de la anotación seleccionada
@@ -676,6 +765,19 @@ class AdvancedAnnotationTool:
                         current_image, 
                         annotations
                     )
+                    
+                    # Obtener el nombre de la clase anterior para el mensaje
+                    old_class_name = updated_annotations[selected_id]['class_name']
+                    
+                    # Convertir new_class a entero si es string
+                    if isinstance(new_class, str):
+                        new_class = int(new_class)
+                    
+                    # Validar que el índice de clase sea válido
+                    if not (0 <= new_class < len(self.classes)):
+                        print(f"ERROR: Índice de clase inválido: {new_class}")
+                        error_message = f"❌ Error: Índice de clase inválido ({new_class})"
+                        return dash.no_update, dash.no_update, dash.no_update, True, error_message
                     
                     # Actualizar la clase (usar tanto class como class_id para compatibilidad)
                     updated_annotations[selected_id]['class'] = new_class
@@ -692,23 +794,28 @@ class AdvancedAnnotationTool:
                         print(f"ERROR guardando cambio de clase: {save_error}")
                     
                     # Regenerar la figura
-                    show_ids = True  # Mostrar IDs para verificar selección
-                    show_coords = False
+                    show_ids = 'show_ids' in (display_options or ['show_ids'])
+                    show_coords = 'show_coords' in (display_options or [])
                     updated_figure, _ = self.figure_generator.create_figure_with_annotations(
                         current_image,
-                        updated_annotations, 0.8, show_ids, show_coords, selected_id
+                        updated_annotations, opacity, show_ids, show_coords, selected_id
                     )
                     
-                    print(f"DEBUG CLASS CHANGE: Índice={selected_id}, New Class={self.classes[new_class]}")
+                    print(f"DEBUG CLASS CHANGE SUCCESS: Índice={selected_id}, Old Class={old_class_name}, New Class={self.classes[new_class]}")
                     
-                    return updated_annotations, updated_figure, selected_id
+                    # Mensaje de éxito
+                    success_message = f"✅ Cambiado exitosamente: {old_class_name} → {self.classes[new_class]} (índice: {selected_id})"
+                    
+                    return updated_annotations, updated_figure, selected_id, True, success_message
                 
             except Exception as e:
                 print(f"ERROR changing class: {e}")
                 import traceback
                 traceback.print_exc()
+                error_message = f"❌ Error cambiando clase: {str(e)}"
+                return dash.no_update, dash.no_update, dash.no_update, True, error_message
             
-            return dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         @self.app.callback(
             [Output('current-annotations', 'data', allow_duplicate=True),
@@ -863,7 +970,7 @@ class AdvancedAnnotationTool:
             ], color="info", className="text-center")]
         
         items = []
-        for ann in annotations:
+        for idx, ann in enumerate(annotations):
             items.append(
                 dbc.Card([
                     dbc.CardBody([
@@ -871,21 +978,24 @@ class AdvancedAnnotationTool:
                             dbc.Col([
                                 html.H6(f"🏷️ {ann['class_name']}", className="card-title mb-1", 
                                        style={"color": "#00d4aa", "font-weight": "bold"}),
-                                html.Small(f"ID: {ann['id']}", className="text-muted"),
-                            ], width=8),
+                                html.Small(f"Índice: {idx}", className="text-muted"),
+                            ], width=6),
                             dbc.Col([
                                 dbc.ButtonGroup([
-                                    dbc.Button("🗑️", id={"type": "delete-btn", "index": ann['id']}, 
+                                    dbc.Button("🎯", id={"type": "select-btn", "index": idx}, 
+                                             size="sm", color="warning", title="Seleccionar para cambiar clase", 
+                                             className="shadow-sm"),
+                                    dbc.Button("🗑️", id={"type": "delete-btn", "index": ann.get('id', idx)}, 
                                              size="sm", color="danger", title="Eliminar", 
                                              className="shadow-sm")
                                 ], size="sm")
-                            ], width=4, className="text-end")
+                            ], width=6, className="text-end")
                         ]),
                         html.Hr(className="my-2", style={"border-color": "#495057"}),
                         html.Small([
                             f"Centro: ({ann['x_center']:.3f}, {ann['y_center']:.3f})", html.Br(),
                             f"Tamaño: {ann['width']:.3f} × {ann['height']:.3f}", html.Br(),
-                            html.Strong("💡 Arrastra bordes para redimensionar", 
+                            html.Strong("🎯 Seleccionar para cambiar clase • 💡 Arrastra bordes para redimensionar", 
                                       className="text-info", style={"color": "#00d4aa !important"})
                         ], className="text-muted")
                     ], className="py-2", style={"background": "#2d3748"})
