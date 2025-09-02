@@ -121,7 +121,7 @@ class AdvancedAnnotationTool:
         """Crear el header de la aplicación"""
         return dbc.Row([
             dbc.Col([
-                html.H1("🔧 Herramienta Avanzada de Corrección de Etiquetado", 
+                html.H1("🔧 Cbot", 
                        className="text-center mb-3", 
                        style={"color": "#00d4aa", "font-weight": "bold", 
                              "font-family": "Arial Black", 
