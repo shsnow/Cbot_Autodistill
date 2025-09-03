@@ -8,6 +8,7 @@ from dash import dcc, html, callback, Input, Output, State, ctx, ALL, no_update,
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import json
+import argparse
 import os
 import re
 
@@ -21,13 +22,14 @@ from utils import (
 class AdvancedAnnotationTool:
     """Herramienta avanzada para edición de anotaciones YOLO"""
     
-    def __init__(self, dataset_path="dataset_cruce_3", classes_yaml="classes.yaml"):
+    def __init__(self, dataset_path):
         self.dataset_path = dataset_path
-        self.images_path = os.path.join(dataset_path, "train", "images")
-        self.labels_path = os.path.join(dataset_path, "train", "labels")
+        self.classes_yaml = os.path.join(dataset_path, "data.yaml")
+        self.images_path = os.path.join(dataset_path, "images")
+        self.labels_path = os.path.join(dataset_path, "annotations")
         
         # Inicializar módulos
-        self._initialize_modules(classes_yaml)
+        self._initialize_modules(self.classes_yaml)
         
         # Variables de estado
         self.current_image_index = 0
@@ -1067,13 +1069,23 @@ class AdvancedAnnotationTool:
 
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="Herramienta Avanzada de Corrección de Etiquetado")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="dataset_cruce_3",
+        help="Ruta del dataset a usar (ej: dataset_cruce_3)"
+    )
+    args = parser.parse_args()
+
     try:
-        tool = AdvancedAnnotationTool()
+        tool = AdvancedAnnotationTool(dataset_path=args.dataset)
         tool.run(debug=False, port=8050)
     except Exception as e:
         print(f"❌ Error iniciando la aplicación: {e}")
         print("💡 Asegúrate de que:")
-        print("  - El directorio dataset_cruce_3 existe")
-        print("  - Hay imágenes en dataset_cruce_3/train/images/")
+        print(f"  - El directorio {args.dataset} existe")
+        print("  - Hay imágenes en train/images/")
         print("  - El archivo classes.yaml existe con las clases definidas")
         print("  - Las dependencias están instaladas")

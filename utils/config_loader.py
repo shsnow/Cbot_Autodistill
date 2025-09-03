@@ -34,17 +34,60 @@ class ConfigLoader:
             print("⚠️ No se encontró la clave 'names' en el archivo YAML")
             print("🔄 Usando clases por defecto: ['vehículo']")
             return ["vehículo"]
-        
+
         try:
-            names_dict = self.config_data['names']
-            max_index = max(names_dict.keys()) if names_dict else 0
-            classes_list = [''] * (max_index + 1)
-            
-            for index, name in names_dict.items():
-                classes_list[index] = name
-            
-            print(f"✅ Clases cargadas: {classes_list}")
-            return classes_list
+            names = self.config_data['names']
+
+            # Caso 1: Ultralytics data.yaml -> lista de nombres
+            if isinstance(names, list):
+                classes_list = [str(n).strip() for n in names if n is not None and str(n).strip() != ""]
+                if not classes_list:
+                    raise ValueError("La lista 'names' está vacía")
+                print(f"✅ Clases cargadas (lista): {classes_list}")
+                return classes_list
+
+            # Caso 2: Diccionario índice->nombre (claves int o str numéricas)
+            if isinstance(names, dict):
+                # Normalizar posibles claves string numéricas
+                keys = list(names.keys())
+                values = list(names.values())
+
+                # Detectar si es nombre->índice (valores int)
+                if all(isinstance(v, int) or (isinstance(v, str) and str(v).isdigit()) for v in values):
+                    # nombre -> índice, invertimos
+                    max_index = max(int(v) for v in values) if values else -1
+                    classes_list = [''] * (max_index + 1)
+                    for k, v in names.items():
+                        idx = int(v)
+                        classes_list[idx] = str(k).strip()
+                    classes_list = [c for c in classes_list if c != '']
+                    if not classes_list:
+                        raise ValueError("No se pudieron derivar clases de nombre->índice")
+                    print(f"✅ Clases cargadas (dict nombre->índice): {classes_list}")
+                    return classes_list
+
+                # Índice -> nombre
+                if all((isinstance(k, int) or (isinstance(k, str) and str(k).isdigit())) for k in keys):
+                    normalized = {int(k): str(v).strip() for k, v in names.items() if v is not None}
+                    max_index = max(normalized.keys()) if normalized else -1
+                    classes_list = [''] * (max_index + 1)
+                    for idx, name in normalized.items():
+                        classes_list[idx] = name
+                    classes_list = [c for c in classes_list if c != '']
+                    if not classes_list:
+                        raise ValueError("No se pudieron derivar clases de índice->nombre")
+                    print(f"✅ Clases cargadas (dict índice->nombre): {classes_list}")
+                    return classes_list
+
+            # Caso 3: string separada por comas (fallback amistoso)
+            if isinstance(names, str):
+                parts = [p.strip() for p in names.split(',') if p.strip()]
+                if parts:
+                    print(f"✅ Clases cargadas (csv): {parts}")
+                    return parts
+
+            # Si llegamos aquí, formato no soportado
+            raise ValueError(f"Formato de 'names' no soportado: {type(names)}")
         except Exception as e:
             print(f"❌ Error procesando clases: {str(e)}")
             print("🔄 Usando clases por defecto: ['vehículo']")

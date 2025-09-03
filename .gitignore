@@ -6,3 +6,8 @@ __pycache__
 weas
 *.zip
 a
+
+# Ignorar directorios de datos
+videos/
+frames/
+dataset/
