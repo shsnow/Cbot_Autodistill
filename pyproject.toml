@@ -1,0 +1,35 @@
+[project]
+name = "cbot-autodistill"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "autodistill>=0.1.29",
+    "autodistill-grounded-sam>=0.1.2",
+    "autodistill-grounding-dino>=0.1.4",
+    "autodistill-yolov8>=0.1.4",
+    "dash>=3.2.0",
+    "dash-bootstrap-components>=2.0.4",
+    "opencv-python>=4.12.0.88",
+    "pandas>=2.3.2",
+    "plotly>=6.3.0",
+    "roboflow>=1.2.7",
+    "scikit-learn>=1.7.1",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+ 
