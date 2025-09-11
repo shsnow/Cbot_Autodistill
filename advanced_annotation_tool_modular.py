@@ -41,8 +41,18 @@ class AdvancedAnnotationTool:
         # Obtener archivos de imagen
         self._load_image_files()
         
-        # Configurar la app Dash
-        self.app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
+        # Configurar la app Dash con tema moderno
+        external_stylesheets = [
+            dbc.themes.BOOTSTRAP,
+            "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
+            {
+                "href": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+                "rel": "stylesheet"
+            }
+        ]
+        
+
+        self.app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
         self.setup_layout()
         self.setup_callbacks()
     
@@ -87,53 +97,65 @@ class AdvancedAnnotationTool:
     
     def setup_layout(self):
         """Configurar el layout de la aplicación"""
-        self.app.layout = dbc.Container([
-            # Stores para mantener el estado
-            dcc.Store(id='current-annotations', data=[]),
-            dcc.Store(id='current-image-data', data={}),
-            dcc.Store(id='image-dimensions', data={}),
-            dcc.Store(id='selected-annotation', data=None),
-            dcc.Store(id='keyboard-trigger', data=0),
-            
-            # Elemento invisible para el listener de teclado
-            html.Div(id="keyboard-listener", style={"display": "none"}),
-            
-            # Header
-            self._create_header(),
-            
-            # Control Panel
-            self._create_control_panel(),
-            
-            # Main content area
-            self._create_main_content(),
-            
-            # Modals
-            self._create_modals(),
-            
-            # Toast para notificaciones
-            self._create_toast(),
-            
-        ], fluid=True, style={
-            'padding': '1rem', 
-            'background': 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)', 
-            'min-height': '100vh'
-        })
+        self.app.layout = html.Div([
+            dbc.Container([
+                # Stores para mantener el estado
+                dcc.Store(id='current-annotations', data=[]),
+                dcc.Store(id='current-image-data', data={}),
+                dcc.Store(id='image-dimensions', data={}),
+                dcc.Store(id='selected-annotation', data=None),
+                dcc.Store(id='keyboard-trigger', data=0),
+                
+                # Elemento invisible para el listener de teclado
+                html.Div(id="keyboard-listener", style={"display": "none"}),
+                
+                # Header
+                self._create_header(),
+                
+                # Control Panel
+                self._create_control_panel(),
+                
+                # Main content area
+                self._create_main_content(),
+                
+                # Modals
+                self._create_modals(),
+                
+                # Toast para notificaciones
+                self._create_toast(),
+                
+            ], fluid=True)
+        ])
     
     def _create_header(self):
-        """Crear el header de la aplicación"""
-        return dbc.Row([
-            dbc.Col([
-                html.H1("🔧 Cbot", 
-                       className="text-center mb-3", 
-                       style={"color": "#00d4aa", "font-weight": "bold", 
-                             "font-family": "Arial Black", 
-                             "text-shadow": "0 0 10px rgba(0,212,170,0.5)"}),
-                html.P("Edita anotaciones YOLO de manera interactiva - Similar a CVAT",
-                       className="text-center", 
-                       style={"color": "#adb5bd", "font-size": "1.1rem", 
-                             "margin-bottom": "2rem"}),
-                html.Hr(style={"border-color": "#495057", "border-width": "2px"})
-            ])
+        """Crear el header de la aplicación con diseño moderno"""
+        return html.Div([
+            dbc.Navbar([
+                dbc.Container([
+                    # Brand/Logo
+                    dbc.NavbarBrand([
+                        html.I(className="fas fa-vector-square me-2", 
+                              style={"color": "#2563eb", "font-size": "1.5rem"}),
+                        "Advanced Annotation Tool"
+                    ], style={
+                        "font-family": "Inter, sans-serif", 
+                        "font-weight": "600",
+                        "font-size": "1.3rem",
+                        "color": "#1f2937"
+                    }),
+                    
+                    # Status info
+                    dbc.Nav([
+                        dbc.NavItem([
+                            html.Div([
+                                html.I(className="fas fa-database me-1", style={"color": "#6b7280"}),
+                                html.Span("YOLO Dataset Editor", className="small text-muted")
+                            ])
+                        ])
+                    ], className="ms-auto")
+                ], fluid=True)
+            ], color="white", className="border-bottom shadow-sm mb-4", 
+               style={"border-bottom": "1px solid #e5e7eb !important"})
         ])
     
     def _create_control_panel(self):
@@ -143,87 +165,164 @@ class AdvancedAnnotationTool:
                 dbc.Row([
                     # Navegación
                     dbc.Col([
-                        html.Label("📂 Navegación:", className="fw-bold mb-2", 
-                                 style={"color": "#00d4aa", "font-family": "Arial Black"}),
-                        dbc.ButtonGroup([
-                            dbc.Button("◀◀ Primero", id="first-button", color="outline-info", 
-                                     size="sm", className="shadow-sm"),
-                            dbc.Button("◀ Anterior", id="prev-button", color="info", 
-                                     size="sm", className="shadow-sm"),
-                            dbc.Button("Siguiente ▶", id="next-button", color="info", 
-                                     size="sm", className="shadow-sm"),
-                            dbc.Button("Último ▶▶", id="last-button", color="outline-info", 
-                                     size="sm", className="shadow-sm"),
-                        ], className="w-100"),
+                        html.Div([
+                            html.H6([
+                                html.I(className="fas fa-folder-open me-2", style={"color": "#6366f1"}),
+                                "Navegación"
+                            ], className="mb-3 text-body fw-semibold", style={"font-size": "0.9rem"}),
+                            dbc.ButtonGroup([
+                                dbc.Button([
+                                    html.I(className="fas fa-angle-double-left me-1"),
+                                    "Primero"
+                                ], id="first-button", color="light", outline=True,
+                                 size="sm", className="border-secondary"),
+                                dbc.Button([
+                                    html.I(className="fas fa-chevron-left me-1"),
+                                    "Anterior"
+                                ], id="prev-button", color="primary", 
+                                 size="sm"),
+                                dbc.Button([
+                                    "Siguiente",
+                                    html.I(className="fas fa-chevron-right ms-1")
+                                ], id="next-button", color="primary", 
+                                 size="sm"),
+                                dbc.Button([
+                                    "Último",
+                                    html.I(className="fas fa-angle-double-right ms-1")
+                                ], id="last-button", color="light", outline=True,
+                                 size="sm", className="border-secondary"),
+                            ], className="w-100"),
+                        ])
                     ], width=3),
                     
                     # Estado
                     dbc.Col([
-                        html.Label("📊 Estado:", className="fw-bold mb-2", 
-                                 style={"color": "#00d4aa", "font-family": "Arial Black"}),
-                        html.P(id="image-counter", className="text-center mb-0 fs-6 fw-bold",
-                              style={"color": "#adb5bd", "background": "rgba(0,212,170,0.1)", 
-                                    "padding": "0.5rem", "border-radius": "0.5rem"})
+                        html.Div([
+                            html.H6([
+                                html.I(className="fas fa-chart-bar me-2", style={"color": "#10b981"}),
+                                "Estado"
+                            ], className="mb-3 text-body fw-semibold", style={"font-size": "0.9rem"}),
+                            dbc.Card([
+                                dbc.CardBody([
+                                    html.P(id="image-counter", className="text-center mb-0 fw-bold",
+                                          style={"font-size": "0.85rem", "color": "#374151"})
+                                ], className="py-2")
+                            ], className="bg-light border-0 shadow-sm")
+                        ])
                     ], width=3),
                     
                     # Herramientas
                     dbc.Col([
-                        html.Label("🛠️ Herramientas:", className="fw-bold mb-2", 
-                                 style={"color": "#00d4aa", "font-family": "Arial Black"}),
-                        dbc.ButtonGroup([
-                            dbc.Button("↶ Deshacer", id="undo-button", color="warning", 
-                                     size="sm", className="shadow-sm", title="Ctrl+Z"),
-                            dbc.Button("🗑️ Seleccionada", id="delete-selected-button", 
-                                     color="danger", size="sm", className="shadow-sm", 
-                                     title="Eliminar anotación seleccionada - Supr"),
-                        ], className="w-100 mb-1"),
-                        dbc.ButtonGroup([
-                            dbc.Button("🗑️ Última", id="delete-last-button", 
-                                     color="outline-danger", size="sm", className="shadow-sm", 
-                                     title="Eliminar última anotación"),
-                        ], className="w-100 mb-1"),
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Input(
-                                    id="delete-id-input", 
-                                    type="number", 
-                                    placeholder="ID", 
-                                    size="sm",
-                                    min=0,
-                                    style={"width": "60px"}
-                                )
-                            ], width=4),
-                            dbc.Col([
-                                dbc.Button("🗑️ ID", id="delete-by-id-button", 
-                                         color="outline-danger", size="sm", className="shadow-sm",
-                                         title="Eliminar por ID")
-                            ], width=8)
-                        ], className="w-100 mb-1"),
-                        dbc.ButtonGroup([
-                            dbc.Button("🗑️ Eliminar Frame", id="delete-frame-button", 
-                                     color="danger", size="sm", className="shadow-sm"),
-                        ], className="w-100"),
-                        html.Small("✏️ Dibuja para crear • 🎯 Clic para seleccionar • 🗑️ Supr para eliminar", 
-                                 className="text-muted mt-1")
+                        html.Div([
+                            html.H6([
+                                html.I(className="fas fa-tools me-2", style={"color": "#f59e0b"}),
+                                "Herramientas"
+                            ], className="mb-3 text-body fw-semibold", style={"font-size": "0.9rem"}),
+                            
+                            # Botón principal de deshacer
+                            dbc.Button([
+                                html.I(className="fas fa-undo me-2"),
+                                "Deshacer"
+                            ], id="undo-button", color="warning", outline=True,
+                             size="sm", className="mb-3 w-100", title="Ctrl+Z"),
+                            
+                            # Menú desplegable de eliminación
+                            dbc.ButtonGroup([
+                                dbc.Button([
+                                    html.I(className="fas fa-trash me-1"),
+                                    "Eliminar"
+                                ], color="danger", outline=True, size="sm", disabled=True),
+                                dbc.DropdownMenu([
+                                    dbc.DropdownMenuItem([
+                                        html.I(className="fas fa-mouse-pointer me-2"),
+                                        "Seleccionada"
+                                    ], id="delete-selected-button", className="py-2"),
+                                    dbc.DropdownMenuItem(divider=True),
+                                    dbc.DropdownMenuItem([
+                                        html.I(className="fas fa-arrow-left me-2"),
+                                        "Última anotación"
+                                    ], id="delete-last-button", className="py-2"),
+                                    dbc.DropdownMenuItem([
+                                        html.I(className="fas fa-image me-2"),
+                                        "Todo el frame"
+                                    ], id="delete-frame-button", className="py-2"),
+                                    dbc.DropdownMenuItem(divider=True),
+                                    dbc.DropdownMenuItem([
+                                        html.Div([
+                                            html.I(className="fas fa-hashtag me-2"),
+                                            "Por ID:",
+                                            dbc.InputGroup([
+                                                dbc.Input(
+                                                    id="delete-id-input", 
+                                                    type="number", 
+                                                    placeholder="ID", 
+                                                    size="sm",
+                                                    min=0,
+                                                    className="mt-1",
+                                                    style={"width": "70px"}
+                                                ),
+                                                dbc.Button([
+                                                    html.I(className="fas fa-trash")
+                                                ], id="delete-by-id-button", 
+                                                 color="danger", outline=True, size="sm",
+                                                 className="mt-1")
+                                            ], size="sm")
+                                        ])
+                                    ], header=True, className="px-3")
+                                ], 
+                                toggle_style={"border": "none"},
+                                direction="up",
+                                size="sm")
+                            ], className="w-100 mb-2"),
+                            
+                            html.Small([
+                                html.I(className="fas fa-lightbulb me-1"),
+                                "Arrastra para crear • Clic para seleccionar"
+                            ], className="text-muted d-block", style={"font-size": "0.75rem"})
+                        ])
                     ], width=3),
                     
-                    # Acciones
+                    # Acciones y Configuración
                     dbc.Col([
-                        html.Label("💾 Acciones:", className="fw-bold mb-2", 
-                                 style={"color": "#00d4aa", "font-family": "Arial Black"}),
-                        dbc.ButtonGroup([
-                            dbc.Button("🔄 Recargar", id="reload-button", color="info", 
-                                     size="sm", className="shadow-sm"),
-                        ]),
-                        html.Small("⌨️ F=Siguiente • D=Anterior • Ctrl+Z=Deshacer • Supr=Eliminar", 
-                                 className="text-muted mt-1")
+                        html.Div([
+                            html.H6([
+                                html.I(className="fas fa-cogs me-2", style={"color": "#8b5cf6"}),
+                                "Configuración"
+                            ], className="mb-3 text-body fw-semibold", style={"font-size": "0.9rem"}),
+                            
+                            # Botón de recarga
+                            dbc.Button([
+                                html.I(className="fas fa-sync-alt me-2"),
+                                "Recargar Dataset"
+                            ], id="reload-button", color="info", outline=True,
+                             size="sm", className="w-100 mb-3"),
+                             
+                            # Información de atajos compacta
+                            dbc.Card([
+                                dbc.CardBody([
+                                    html.H6([
+                                        html.I(className="fas fa-keyboard me-2", style={"color": "#6b7280"}),
+                                        "Atajos"
+                                    ], className="mb-2", style={"font-size": "0.8rem"}),
+                                    html.Div([
+                                        dbc.Badge("F", color="light", text_color="dark", className="me-1"),
+                                        html.Small("Siguiente", className="me-3 text-muted"),
+                                        dbc.Badge("D", color="light", text_color="dark", className="me-1"),
+                                        html.Small("Anterior", className="text-muted"),
+                                    ], className="mb-1"),
+                                    html.Div([
+                                        dbc.Badge("Ctrl+Z", color="light", text_color="dark", className="me-1"),
+                                        html.Small("Deshacer", className="me-2 text-muted"),
+                                        dbc.Badge("Supr", color="light", text_color="dark", className="me-1"),
+                                        html.Small("Eliminar", className="text-muted"),
+                                    ])
+                                ], className="py-2")
+                            ], className="border-0 bg-light", style={"border-radius": "8px"})
+                        ])
                     ], width=3)
                 ])
-            ])
-        ], className="mb-3", style={
-            "background": "linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%)", 
-            "border": "1px solid #495057", "border-radius": "1rem"
-        })
+            ], className="p-4")
+        ], className="mb-4 border-0 shadow-sm", style={"border-radius": "12px"})
     
     def _create_main_content(self):
         """Crear el contenido principal"""
@@ -232,11 +331,14 @@ class AdvancedAnnotationTool:
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.H5("📸 Visor de Imágenes", className="mb-0", 
-                               style={"color": "#00d4aa", "font-family": "Arial Black"}),
-                        dbc.Badge(id="annotation-count-badge", color="info", className="ms-2")
-                    ], style={"background": "linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%)", 
-                             "border-bottom": "1px solid #495057"}),
+                        html.Div([
+                            html.H5([
+                                html.I(className="fas fa-image me-2", style={"color": "#3b82f6"}),
+                                "Visor de Imágenes"
+                            ], className="mb-0 text-body fw-semibold"),
+                            dbc.Badge(id="annotation-count-badge", color="primary", pill=True, className="ms-auto")
+                        ], className="d-flex align-items-center justify-content-between")
+                    ], className="bg-white border-bottom border-light"),
                     dbc.CardBody([
                         dcc.Graph(
                             id="image-graph",
@@ -252,13 +354,14 @@ class AdvancedAnnotationTool:
                                     'height': 500, 'width': 700, 'scale': 1
                                 }
                             },
-                            style={'height': '65vh', 'width': '100%'}
+                            style={'height': '70vh', 'width': '100%'}
                         ),
-                        html.Div(id="mouse-coords", className="text-muted small mt-2")
-                    ], style={'padding': '0.5rem', 'background': '#1a1a1a', 
-                             'border-radius': '0 0 1rem 1rem'})
-                ], style={"background": "#1a1a1a", "border": "1px solid #495057", 
-                         "border-radius": "1rem"})
+                        html.Div([
+                            html.I(className="fas fa-mouse-pointer me-1", style={"color": "#6b7280"}),
+                            html.Span(id="mouse-coords", className="text-muted small")
+                        ], className="mt-2 px-2")
+                    ], className="p-3 bg-light")
+                ], className="border-0 shadow-sm", style={"border-radius": "12px"})
             ], width=8),
             
             # Sidebar con controles
@@ -272,130 +375,133 @@ class AdvancedAnnotationTool:
     def _create_annotations_list(self):
         """Crear la lista de anotaciones"""
         return dbc.Card([
-            dbc.CardHeader("🏷️ Lista de Anotaciones", 
-                         style={"background": "linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%)", 
-                               "color": "#00d4aa", "font-weight": "bold", 
-                               "border-bottom": "1px solid #495057"}),
+            dbc.CardHeader([
+                html.H6([
+                    html.I(className="fas fa-tags me-2", style={"color": "#f59e0b"}),
+                    "Lista de Anotaciones"
+                ], className="mb-0 text-body fw-semibold")
+            ], className="bg-white border-bottom border-light"),
             dbc.CardBody([
-                html.Div(id="annotations-list", style={'max-height': '300px', 'overflow-y': 'auto'})
-            ], style={"background": "#1a1a1a"})
-        ], className="mb-3", style={"background": "#1a1a1a", "border": "1px solid #495057", 
-                                   "border-radius": "1rem"})
+                html.Div(id="annotations-list", 
+                        style={'max-height': '320px', 'overflow-y': 'auto'},
+                        className="custom-scrollbar")
+            ], className="p-3")
+        ], className="mb-4 border-0 shadow-sm", style={"border-radius": "12px"})
     
     def _create_configuration_panel(self):
         """Crear el panel de configuración"""
         return dbc.Card([
-            dbc.CardHeader("🎨 Configuración", 
-                         style={"background": "linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%)", 
-                               "color": "#00d4aa", "font-weight": "bold", 
-                               "border-bottom": "1px solid #495057"}),
+            dbc.CardHeader([
+                html.H6([
+                    html.I(className="fas fa-cog me-2", style={"color": "#8b5cf6"}),
+                    "Configuración"
+                ], className="mb-0 text-body fw-semibold")
+            ], className="bg-white border-bottom border-light"),
             dbc.CardBody([
-                html.Label("Clase para nuevas anotaciones:", className="mb-2", 
-                         style={"color": "#00d4aa", "font-weight": "bold"}),
-                dbc.Select(
-                    id="class-selector",
-                    options=[{"label": cls, "value": i} for i, cls in enumerate(self.classes)],
-                    value=0, size="sm", className="mb-3"
-                ),
+                # Nueva clase para anotaciones
+                html.Div([
+                    html.Label([
+                        html.I(className="fas fa-plus-circle me-2", style={"color": "#10b981"}),
+                        "Clase para nuevas anotaciones"
+                    ], className="mb-2 fw-semibold text-body", style={"font-size": "0.9rem"}),
+                    dbc.Select(
+                        id="class-selector",
+                        options=[{"label": cls, "value": i} for i, cls in enumerate(self.classes)],
+                        value=0, size="sm", className="mb-4"
+                    )
+                ]),
                 
-                # Sección para anotación seleccionada - MÁS PROMINENTE
-                html.Hr(className="my-3", style={"border-color": "#ffd700", "border-width": "3px"}),
-                dbc.Alert([
-                    html.H5("🎯 CAMBIAR CLASE DE ANOTACIÓN SELECCIONADA", 
-                           className="mb-3", style={"color": "#ffd700", "font-weight": "bold", "text-align": "center"}),
+                # Sección para cambiar clase - más limpia
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H6([
+                            html.I(className="fas fa-edit me-2", style={"color": "#f59e0b"}),
+                            "Cambiar Clase Seleccionada"
+                        ], className="mb-0 text-body fw-semibold")
+                    ], className="bg-light border-0"),
+                    dbc.CardBody([
+                        dbc.Alert(id="selected-info", color="info", className="mb-3 text-center small"),
+                        
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("Nueva clase:", className="mb-2 small fw-semibold"),
+                                dbc.Select(
+                                    id="selected-class-selector",
+                                    options=[{"label": cls, "value": i} for i, cls in enumerate(self.classes)],
+                                    value=0, size="sm", disabled=True
+                                )
+                            ], width=7),
+                            dbc.Col([
+                                html.Label("Aplicar:", className="mb-2 small fw-semibold"),
+                                dbc.Button([
+                                    html.I(className="fas fa-check me-1"),
+                                    "Cambiar"
+                                ], id="change-class-button", color="warning", 
+                                 size="sm", disabled=True, className="w-100")
+                            ], width=5)
+                        ]),
+                        
+                        html.Small([
+                            html.I(className="fas fa-lightbulb me-1"),
+                            "Haz clic en una caja o usa el botón 🎯 para seleccionar"
+                        ], className="text-muted d-block mt-2")
+                    ], className="py-3")
+                ], className="mb-4 border-0 bg-light"),
+                
+                # Controles de visualización
+                html.Div([
+                    html.Label([
+                        html.I(className="fas fa-eye me-2", style={"color": "#6366f1"}),
+                        "Visualización"
+                    ], className="mb-3 fw-semibold text-body", style={"font-size": "0.9rem"}),
                     
-                    # Estado de selección prominente
-                    dbc.Alert(id="selected-info", color="info", className="mb-3 text-center", 
-                             style={"font-size": "1.1rem", "font-weight": "bold", "border": "2px solid #17a2b8"}),
+                    html.Label("Opacidad:", className="mb-2 small fw-semibold"),
+                    dcc.Slider(
+                        id="opacity-slider", min=0.1, max=1.0, value=0.3, step=0.1,
+                        marks={0.1: '0.1', 0.5: '0.5', 1.0: '1.0'}, className="mb-3"
+                    ),
                     
-                    # Controles más grandes y visibles
-                    dbc.Row([
-                        dbc.Col([
-                            html.Label("🔄 Nueva clase:", className="mb-2", 
-                                     style={"color": "#ffd700", "font-weight": "bold", "font-size": "1.1rem"}),
-                            dbc.Select(
-                                id="selected-class-selector",
-                                options=[{"label": f"🏷️ {cls}", "value": i} for i, cls in enumerate(self.classes)],
-                                value=0, size="lg", disabled=True,
-                                style={"font-weight": "bold", "font-size": "1rem"}
-                            )
-                        ], width=7),
-                        dbc.Col([
-                            html.Label("🚀 Acción:", className="mb-2", 
-                                     style={"color": "#ffd700", "font-weight": "bold", "font-size": "1.1rem"}),
-                            dbc.Button("✅ CAMBIAR AHORA", id="change-class-button", color="success", 
-                                     size="lg", disabled=True, 
-                                     title="Cambiar clase de la anotación seleccionada (selecciona una anotación primero)",
-                                     style={"font-weight": "bold", "width": "100%", "opacity": "0.6", "font-size": "1rem"})
-                        ], width=5)
-                    ], className="mb-3"),
-                    
-                    # Instrucciones mejoradas
-                    dbc.Alert([
-                        html.H6("📋 Múltiples formas de seleccionar:", className="mb-2", style={"color": "#856404"}),
-                        html.Ol([
-                            html.Li("🖱️ Haz clic en cualquier parte de una bounding box en la imagen"),
-                            html.Li("🎯 Presiona el botón '🎯' en la lista de anotaciones (panel derecho)"),
-                            html.Li("✏️ Arrastra/edita una bounding box (se selecciona automáticamente)"),
-                            html.Li("👀 Verás que se resalta en amarillo cuando esté seleccionada"),
-                            html.Li("🔄 Elige la nueva clase en el selector de arriba"),
-                            html.Li("✅ Presiona 'CAMBIAR AHORA' para aplicar"),
-                            html.Li("💾 El cambio se guarda automáticamente")
-                        ], style={"color": "#856404", "margin-bottom": "0"})
-                    ], color="warning", style={"background": "rgba(255,193,7,0.1)", "border": "1px solid #ffc107"})
-                    
-                ], color="warning", style={
-                    "background": "linear-gradient(135deg, rgba(255,215,0,0.15) 0%, rgba(255,215,0,0.08) 100%)", 
-                    "border": "3px solid #ffd700", "border-radius": "1rem", "padding": "1.5rem"
-                }),
-                html.Hr(className="my-2", style={"border-color": "#495057"}),
-                html.Label("Opacidad de las cajas:", className="mb-2", 
-                         style={"color": "#00d4aa", "font-weight": "bold"}),
-                dcc.Slider(
-                    id="opacity-slider", min=0.1, max=1.0, value=0.3, step=0.1,
-                    marks={i/10: str(i/10) for i in range(1, 11)}, className="mb-3"
-                ),
-                dbc.Checklist(
-                    options=[
-                        {"label": " Mostrar IDs", "value": "show_ids"},
-                        {"label": " Mostrar coordenadas", "value": "show_coords"},
-                    ],
-                    value=["show_ids"], id="display-options", inline=True
-                ),
-                html.Hr(className="my-2"),
-                html.Label("💡 Instrucciones:", className="mb-2", 
-                         style={"color": "#00d4aa", "font-weight": "bold"}),
-                dbc.Alert([
-                    html.Strong("✏️ CREAR: ", style={"color": "#00d4aa"}), 
-                    "Arrastra el mouse para dibujar", html.Br(),
-                    html.Strong("🎯 SELECCIONAR: ", style={"color": "#00d4aa"}), 
-                    "Clic en cualquier parte de la caja", html.Br(),
-                    html.Strong("🎨 EDITAR: ", style={"color": "#00d4aa"}), 
-                    "Arrastra bordes/esquinas", html.Br(), 
-                    html.Strong("🗑️ ELIMINAR: ", style={"color": "#00d4aa"}), 
-                    "Supr=Seleccionada • Botones=Última/ID", html.Br(),
-                    html.Strong("⌨️ NAVEGAR: ", style={"color": "#00d4aa"}), 
-                    "F=Siguiente • D=Anterior • Ctrl+Z=Deshacer", html.Br(),
-                    html.Strong("💾 GUARDADO: ", style={"color": "#00d4aa"}), 
-                    "Automático al editar"
-                ], color="dark", className="small", 
-                   style={"background": "rgba(0,212,170,0.1)", "border": "1px solid #00d4aa"})
-            ], style={"background": "#1a1a1a"})
-        ], className="mb-3", style={"background": "#1a1a1a", "border": "1px solid #495057", 
-                                   "border-radius": "1rem"})
+                    dbc.Checklist(
+                        options=[
+                            {"label": "Mostrar IDs", "value": "show_ids"},
+                            {"label": "Mostrar coordenadas", "value": "show_coords"},
+                        ],
+                        value=["show_ids"], id="display-options", inline=True,
+                        className="mb-3"
+                    )
+                ]),
+                
+                # Instrucciones compactas
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6([
+                            html.I(className="fas fa-info-circle me-2", style={"color": "#3b82f6"}),
+                            "Atajos de Teclado"
+                        ], className="mb-2 text-body fw-semibold small"),
+                        html.Div([
+                            html.Small("F: Siguiente imagen", className="d-block text-muted"),
+                            html.Small("D: Imagen anterior", className="d-block text-muted"),
+                            html.Small("Ctrl+Z: Deshacer", className="d-block text-muted"),
+                            html.Small("Supr: Eliminar seleccionada", className="d-block text-muted")
+                        ])
+                    ], className="py-2")
+                ], className="border-0 bg-light")
+            ], className="p-3")
+        ], className="mb-4 border-0 shadow-sm", style={"border-radius": "12px"})
     
     def _create_statistics_panel(self):
         """Crear el panel de estadísticas"""
         return dbc.Card([
-            dbc.CardHeader("📈 Estadísticas", 
-                         style={"background": "linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%)", 
-                               "color": "#00d4aa", "font-weight": "bold", 
-                               "border-bottom": "1px solid #495057"}),
+            dbc.CardHeader([
+                html.H6([
+                    html.I(className="fas fa-chart-bar me-2", style={"color": "#ef4444"}),
+                    "Estadísticas"
+                ], className="mb-0 text-body fw-semibold")
+            ], className="bg-white border-bottom border-light"),
             dbc.CardBody([
                 html.Div(id="stats-content")
-            ], style={"background": "#1a1a1a"})
-        ], style={"background": "#1a1a1a", "border": "1px solid #495057", 
-                 "border-radius": "1rem"})
+            ], className="p-3")
+        ], className="border-0 shadow-sm", style={"border-radius": "12px"})
     
     def _create_modals(self):
         """Crear los modals"""
@@ -967,44 +1073,68 @@ class AdvancedAnnotationTool:
         """Actualizar lista de anotaciones"""
         if not annotations:
             return [dbc.Alert([
-                "📭 No hay anotaciones en esta imagen", html.Br(),
-                html.Small("💡 Dibuja un rectángulo para crear una nueva", className="text-muted")
-            ], color="info", className="text-center")]
+                html.Div([
+                    html.I(className="fas fa-inbox fa-2x mb-2", style={"color": "#94a3b8"}),
+                    html.H6("No hay anotaciones", className="mb-1"),
+                    html.Small("Dibuja un rectángulo para crear una nueva", className="text-muted")
+                ], className="text-center")
+            ], color="light", className="border-0 bg-light")]
         
         items = []
         for idx, ann in enumerate(annotations):
+            # Color de borde más suave
+            border_color = self.class_colors[ann['class_id'] % len(self.class_colors)]
+            
             items.append(
                 dbc.Card([
                     dbc.CardBody([
                         dbc.Row([
                             dbc.Col([
-                                html.H6(f"🏷️ {ann['class_name']}", className="card-title mb-1", 
-                                       style={"color": "#00d4aa", "font-weight": "bold"}),
-                                html.Small(f"Índice: {idx}", className="text-muted"),
+                                html.Div([
+                                    html.I(className="fas fa-tag me-2", 
+                                          style={"color": border_color, "font-size": "0.9rem"}),
+                                    html.Span(ann['class_name'], className="fw-semibold text-dark")
+                                ], className="d-flex align-items-center mb-1"),
+                                html.Small(f"ID: {idx}", className="text-muted", style={"font-size": "0.75rem"}),
                             ], width=6),
                             dbc.Col([
                                 dbc.ButtonGroup([
-                                    dbc.Button("🎯", id={"type": "select-btn", "index": idx}, 
-                                             size="sm", color="warning", title="Seleccionar para cambiar clase", 
-                                             className="shadow-sm"),
-                                    dbc.Button("🗑️", id={"type": "delete-btn", "index": ann.get('id', idx)}, 
-                                             size="sm", color="danger", title="Eliminar", 
-                                             className="shadow-sm")
+                                    dbc.Button([
+                                        html.I(className="fas fa-crosshairs")
+                                    ], id={"type": "select-btn", "index": idx}, 
+                                     size="sm", color="warning", outline=True, 
+                                     title="Seleccionar para cambiar clase"),
+                                    dbc.Button([
+                                        html.I(className="fas fa-trash")
+                                    ], id={"type": "delete-btn", "index": ann.get('id', idx)}, 
+                                     size="sm", color="danger", outline=True, 
+                                     title="Eliminar")
                                 ], size="sm")
                             ], width=6, className="text-end")
                         ]),
-                        html.Hr(className="my-2", style={"border-color": "#495057"}),
-                        html.Small([
-                            f"Centro: ({ann['x_center']:.3f}, {ann['y_center']:.3f})", html.Br(),
-                            f"Tamaño: {ann['width']:.3f} × {ann['height']:.3f}", html.Br(),
-                            html.Strong("🎯 Seleccionar para cambiar clase • 💡 Arrastra bordes para redimensionar", 
-                                      className="text-info", style={"color": "#00d4aa !important"})
-                        ], className="text-muted")
-                    ], className="py-2", style={"background": "#2d3748"})
-                ], className="mb-2", 
-                   style={"border-left": f"4px solid {self.class_colors[ann['class_id'] % len(self.class_colors)]}", 
-                          "box-shadow": "0 4px 8px rgba(0,212,170,0.1)", "background": "#2d3748", 
-                          "border": "1px solid #495057", "border-radius": "0.5rem"})
+                        html.Hr(className="my-2 border-light"),
+                        html.Div([
+                            html.Small([
+                                html.I(className="fas fa-crosshairs me-1", style={"color": "#6b7280"}),
+                                f"Centro: ({ann['x_center']:.3f}, {ann['y_center']:.3f})"
+                            ], className="d-block text-muted mb-1", style={"font-size": "0.75rem"}),
+                            html.Small([
+                                html.I(className="fas fa-expand-arrows-alt me-1", style={"color": "#6b7280"}),
+                                f"Tamaño: {ann['width']:.3f} × {ann['height']:.3f}"
+                            ], className="d-block text-muted mb-2", style={"font-size": "0.75rem"}),
+                            dbc.Alert([
+                                html.I(className="fas fa-info-circle me-1"),
+                                html.Small("Haz clic en 🎯 para seleccionar • Arrastra bordes para redimensionar")
+                            ], color="info", className="py-1 mb-0 border-0", 
+                               style={"background-color": "#e7f3ff", "font-size": "0.7rem"})
+                        ])
+                    ], className="p-3")
+                ], className="mb-3 border-0 shadow-sm", 
+                   style={
+                       "border-left": f"4px solid {border_color} !important", 
+                       "border-radius": "8px",
+                       "background": "white"
+                   })
             )
         
         return items
