@@ -20,7 +20,7 @@ class CallbackManager:
                                selected_class, opacity, display_options):
         """Manejar interacción con formas - creación y edición"""
         if not relayout_data or not img_dims or not image_data:
-            return annotations or [], no_update, False, "", no_update
+            return annotations or [], no_update, False, ""
 
         annotations = annotations or []
         
@@ -115,7 +115,7 @@ class CallbackManager:
                                          opacity, display_options)
         
         # No hacer nada si no hay cambios relevantes
-        return annotations, no_update, False, "", no_update
+        return annotations, no_update, False, ""
     
     def _handle_new_shape(self, new_shape, annotations, img_dims, image_data, 
                          selected_class, opacity, display_options):
@@ -127,12 +127,6 @@ class CallbackManager:
             print(f"DEBUG: image_data: {image_data}")
             print(f"DEBUG: selected_class: {selected_class}, type: {type(selected_class)}")
             print(f"DEBUG: classes disponibles: {self.classes}, type: {type(self.classes)}")
-            
-            # Validar que la forma tenga las coordenadas necesarias para un rectángulo
-            required_coords = ['x0', 'y0', 'x1', 'y1']
-            if not all(coord in new_shape for coord in required_coords):
-                print(f"DEBUG: Forma no válida - no es un rectángulo. Tipo: {new_shape.get('type', 'unknown')}")
-                return annotations, no_update, True, "⚠️ Solo se pueden crear rectángulos para anotaciones", no_update
             
             # Obtener coordenadas
             x0 = min(new_shape['x0'], new_shape['x1'])
@@ -150,7 +144,7 @@ class CallbackManager:
             
             # Validar tamaño mínimo
             if not self.converter.validate_pixel_coords(x0, y0_img, x1, y1_img, min_size=10):
-                return annotations, no_update, True, "⚠️ La caja es muy pequeña (mínimo 10x10 píxeles)", no_update
+                return annotations, no_update, True, "⚠️ La caja es muy pequeña (mínimo 10x10 píxeles)"
             
             # Guardar estado actual para undo ANTES de crear la nueva anotación
             self.undo_manager.push_state(image_data['filename'], annotations)
@@ -218,13 +212,13 @@ class CallbackManager:
             
             print("DEBUG: Figura regenerada exitosamente")
             
-            return new_annotations, fig, True, f"✅ Nueva caja: {self.classes[selected_class]} - Guardado automático", None
+            return new_annotations, fig, True, f"✅ Nueva caja: {self.classes[selected_class]} - Guardado automático"
             
         except Exception as e:
             print(f"ERROR COMPLETO creando nueva anotación: {str(e)}")
             import traceback
             traceback.print_exc()
-            return annotations, no_update, True, f"❌ Error creando caja: {str(e)}", no_update
+            return annotations, no_update, True, f"❌ Error creando caja: {str(e)}"
     
     def _handle_shape_edit(self, shapes, annotations, img_dims, image_data, opacity, display_options):
         """Manejar edición de formas existentes"""
@@ -310,7 +304,7 @@ class CallbackManager:
                     image_data['filename'], updated_annotations, opacity, show_ids, show_coords
                 )
                 
-                return updated_annotations, fig, True, "✏️ Caja editada - Guardado automático", no_update
+                return updated_annotations, fig, True, "✏️ Caja editada - Guardado automático"
             else:
                 print("DEBUG: NO hay cambios que guardar")
             
@@ -318,14 +312,14 @@ class CallbackManager:
             print(f"ERROR editando anotación: {str(e)}")
             import traceback
             traceback.print_exc()
-            return annotations, no_update, True, f"❌ Error editando: {str(e)}", no_update
+            return annotations, no_update, True, f"❌ Error editando: {str(e)}"
         
-        return annotations, no_update, False, "", no_update
+        return annotations, no_update, False, ""
     
     def handle_delete_annotation(self, delete_clicks, annotations, image_data, opacity, display_options):
         """Eliminar anotación específica"""
         if not any(delete_clicks or []) or not ctx.triggered:
-            return annotations, no_update, False, "", no_update
+            return annotations, no_update, False, ""
         
         try:
             # Guardar estado para undo ANTES de eliminar
@@ -358,12 +352,12 @@ class CallbackManager:
                 except Exception as save_error:
                     print(f"Error guardando automáticamente: {save_error}")
                 
-                return annotations, fig, True, f"🗑️ Anotación eliminada - Guardado automático", no_update
+                return annotations, fig, True, f"🗑️ Anotación eliminada - Guardado automático"
             
         except Exception as e:
-            return annotations, no_update, True, f"❌ Error eliminando anotación: {str(e)}", no_update
+            return annotations, no_update, True, f"❌ Error eliminando anotación: {str(e)}"
         
-        return annotations, no_update, False, "", no_update
+        return annotations, no_update, False, ""
     
     def handle_delete_last_annotation(self, delete_clicks, annotations, image_data, opacity, display_options):
         """Eliminar la última anotación (más recientemente creada)"""
@@ -371,11 +365,11 @@ class CallbackManager:
         
         if not delete_clicks:
             print("DEBUG DELETE LAST: No hay clicks, retornando")
-            return annotations or [], no_update, False, "", no_update
+            return annotations or [], no_update, False, ""
             
         if not annotations or len(annotations) == 0:
             print("DEBUG DELETE LAST: No hay anotaciones para eliminar")
-            return annotations or [], no_update, True, "⚠️ No hay anotaciones para eliminar", no_update
+            return annotations or [], no_update, True, "⚠️ No hay anotaciones para eliminar"
         
         try:
             print(f"DEBUG DELETE LAST: Eliminando última anotación (ID: {annotations[-1].get('id', 'sin-id')})")
@@ -406,13 +400,13 @@ class CallbackManager:
             except Exception as save_error:
                 print(f"ERROR DELETE LAST guardando automáticamente: {save_error}")
             
-            return annotations_filtered, fig, True, "🗑️ Última anotación eliminada - Guardado automático", no_update
+            return annotations_filtered, fig, True, "🗑️ Última anotación eliminada - Guardado automático"
             
         except Exception as e:
             print(f"ERROR DELETE LAST eliminando anotación: {str(e)}")
             import traceback
             traceback.print_exc()
-            return annotations or [], no_update, True, f"❌ Error eliminando anotación: {str(e)}", no_update
+            return annotations or [], no_update, True, f"❌ Error eliminando anotación: {str(e)}"
     
     def handle_delete_by_id_annotation(self, delete_clicks, annotations, delete_id, image_data, opacity, display_options):
         """Eliminar anotación por ID específico"""

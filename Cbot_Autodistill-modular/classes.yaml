@@ -1,0 +1,30 @@
+# Configuración de clases para el dataset
+# Este archivo define las clases que se pueden usar en las anotaciones
+
+names:
+  0: sign
+  1: heavy_machine
+  2: light_machine
+  3: bus
+  4: fork
+
+
+
+# Número total de clases
+nc: 8
+
+# Información adicional del dataset
+train: ../dataset_cruce_3/train/images
+val: ../dataset_cruce_3/val/images  # opcional
+test: ../dataset_cruce_3/test/images  # opcional
+
+# Configuración de colores para visualización (opcional)
+colors:
+  - [0, 212, 170]    # vehículo - verde azulado
+  - [255, 107, 107]  # peatón - rojo suave
+  - [78, 205, 196]   # ciclista - turquesa
+  - [69, 183, 209]   # motocicleta - azul
+  - [254, 202, 87]   # autobús - amarillo
+  - [255, 159, 243]  # camión - rosa
+  - [84, 160, 255]   # semáforo - azul claro
+  - [156, 136, 255]  # señal_de_tráfico - púrpura

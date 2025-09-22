@@ -26,7 +26,7 @@ class AdvancedAnnotationTool:
         self.dataset_path = dataset_path
         self.classes_yaml = os.path.join(dataset_path, "data.yaml")
         self.images_path = os.path.join(dataset_path, "images")
-        self.labels_path = os.path.join(dataset_path, "labels")
+        self.labels_path = os.path.join(dataset_path, "annotations")
         
         # Inicializar módulos
         self._initialize_modules(self.classes_yaml)

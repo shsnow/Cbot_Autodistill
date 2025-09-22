@@ -1,0 +1,25 @@
+# Configuración de clases para el dataset
+# Este archivo define las clases que se pueden usar en las anotaciones
+
+names:
+  0: sign
+  1: heavy_machine
+  2: light_machine
+  3: bus
+  4: fork
+
+# Número total de clases
+nc: 5
+
+# Información adicional del dataset
+train: ../CRUCE_COLON_1_class/images
+val: ../CRUCE_COLON_1_class/val/images  # opcional
+test: ../CRUCE_COLON_1_class/test/images  # opcional
+
+# Configuración de colores para visualización (opcional)
+colors:
+  - [0, 212, 170]    # sign - verde azulado
+  - [255, 107, 107]  # heavy_machine - rojo suave
+  - [78, 205, 196]   # light_machine - turquesa
+  - [69, 183, 209]   # bus - azul
+  - [254, 202, 87]   # fork - amarillo

@@ -1,0 +1,135 @@
+/* AutoDistill Suite - Custom CSS (Versión Compatible) */
+
+/* Reset básico para asegurar visibilidad */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #1a1a1a !important;
+    color: #e2e8f0 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+/* Asegurar que todos los textos sean visibles */
+h1, h2, h3, h4, h5, h6, p, span, div {
+    color: #e2e8f0 !important;
+}
+
+.text-light, .text-white {
+    color: #f8f9fa !important;
+}
+
+.text-muted {
+    color: #adb5bd !important;
+}
+
+/* Cards con mejor contraste */
+.card {
+    background-color: #2d3748 !important;
+    border: 1px solid #4a5568 !important;
+    border-radius: 1rem !important;
+}
+
+.card-body {
+    background-color: #2d3748 !important;
+}
+
+.card-header {
+    background-color: #1a202c !important;
+    border-bottom: 1px solid #00d4aa !important;
+    color: #e2e8f0 !important;
+}
+
+/* Navbar */
+.navbar {
+    background-color: #1a202c !important;
+    border-bottom: 2px solid #00d4aa !important;
+}
+
+.navbar-brand {
+    color: #00d4aa !important;
+}
+
+.nav-link {
+    color: #e2e8f0 !important;
+}
+
+.nav-link:hover {
+    color: #00d4aa !important;
+    text-decoration: none;
+}
+
+/* Botones */
+.btn {
+    border-radius: 0.75rem !important;
+    font-weight: bold !important;
+}
+
+.btn-primary {
+    background-color: #00d4aa !important;
+    border-color: #00d4aa !important;
+}
+
+.btn-info {
+    background-color: #00d4aa !important;
+    border-color: #00d4aa !important;
+}
+
+/* Alerts */
+.alert {
+    border-radius: 1rem !important;
+}
+
+/* Animaciones suaves */
+.hover-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0,212,170,0.2) !important;
+}
+
+/* Container principal */
+.container, .container-fluid {
+    color: #e2e8f0 !important;
+}
+
+/* Mejoras adicionales */
+.card {
+    border-radius: 1rem !important;
+}
+
+.btn {
+    border-radius: 0.75rem !important;
+    font-weight: bold;
+}
+
+.badge {
+    border-radius: 0.5rem !important;
+}
+
+/* Animaciones suaves */
+* {
+    transition: all 0.2s ease;
+}
+
+/* Scrollbars personalizados */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #2d3748;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #00d4aa;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #20c997;
+}
