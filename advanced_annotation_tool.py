@@ -570,7 +570,7 @@ class AdvancedAnnotationTool:
         
         fig.update_layout(
             title=dict(
-                text=f"📸 {image_filename} ({img_width}×{img_height}) - ✏️ Dibuja para crear • Arrastra cajas para mover/redimensionar",
+                text=f"📸 {image_filename} ({img_width}×{img_height}) ",
                 font=dict(size=16, color="#00d4aa", family="Arial Black")
             ),
             showlegend=False,
