@@ -7,6 +7,7 @@ import sys
 import argparse
 import re
 import json
+import glob
 
 # Importar las utilidades desde el directorio utils
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -35,6 +36,9 @@ app.title = "AutoDistill Suite - Herramienta de Anotación Completa"
 class AdvancedAnnotationSuite:
     def __init__(self, app):
         self.app = app
+        
+        # Crear carpeta output si no existe
+        os.makedirs('output', exist_ok=True)
         
         # Configurar dataset por defecto
         self.dataset_path = "CRUCE_COLON_1_class"
@@ -475,6 +479,11 @@ class AdvancedAnnotationSuite:
             # Store para mantener el estado de la página actual
             dcc.Store(id='current-page', data={'page': 'home'}),
             
+            # Stores para datos de videos (disponibles globalmente)
+            dcc.Store(id='videos-data', data=[]),
+            dcc.Store(id='videos-refresh', data=0),
+            dcc.Store(id='processing-status', data={}),
+            
             # Navbar
             self.create_navbar(),
             
@@ -491,6 +500,7 @@ class AdvancedAnnotationSuite:
         self._setup_interaction_callbacks()
         self._setup_utility_callbacks()
         self._setup_page_callbacks()
+        self._setup_files_callbacks()
     
     def create_home_page(self):
         """Crear la página de inicio"""
@@ -539,6 +549,103 @@ class AdvancedAnnotationSuite:
                     ], color="success", className="mb-4")
                 ], md=6),
             ])
+        ], fluid=True)
+    
+    def create_files_page(self):
+        """Crear la página de gestión de archivos y videos"""
+        return dbc.Container([
+            # Header de la página
+            dbc.Row([
+                dbc.Col([
+                    html.Div([
+                        dbc.Button("← Volver al Inicio", id="back-home-files", 
+                                 color="secondary", className="mb-3"),
+                        html.H2([
+                            html.I(className="fas fa-video me-3", style={"color": "#00d4aa"}),
+                            "Gestión de Videos y Archivos"
+                        ], className="mb-4"),
+                        html.P("Convierte videos a frames y gestiona tus datasets", 
+                              className="text-muted mb-4")
+                    ])
+                ])
+            ]),
+            
+
+            
+            # Panel de control
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-cog me-2"),
+                                "Panel de Control"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Button([
+                                        html.I(className="fas fa-sync me-2"),
+                                        "Actualizar Lista"
+                                    ], id="refresh-videos-btn", color="primary", 
+                                     className="w-100 mb-2")
+                                ], md=3),
+                                dbc.Col([
+                                    dbc.Button([
+                                        html.I(className="fas fa-folder-open me-2"),
+                                        "Abrir Carpeta Videos"
+                                    ], id="open-videos-folder-btn", color="info", 
+                                     className="w-100 mb-2")
+                                ], md=3),
+                                dbc.Col([
+                                    html.Div([
+                                        html.Label("Carpeta de Videos:", className="mb-1"),
+                                        dbc.Input(
+                                            id="videos-folder-path",
+                                            value="videos/",
+                                            placeholder="Ruta a la carpeta de videos",
+                                            className="mb-2"
+                                        )
+                                    ])
+                                ], md=6)
+                            ])
+                        ])
+                    ], className="mb-4")
+                ])
+            ]),
+            
+            # Estadísticas
+            dbc.Row([
+                dbc.Col([
+                    dbc.Alert(id="videos-stats", color="info")
+                ], md=12)
+            ]),
+            
+            # Lista de videos
+            dbc.Row([
+                dbc.Col([
+                    html.Div(id="videos-grid", children=[
+                        dbc.Alert([
+                            html.Div([
+                                html.I(className="fas fa-video fa-3x mb-3", 
+                                      style={"color": "#6c757d"}),
+                                html.H5("Cargando videos...", className="text-muted"),
+                                html.P("Buscando archivos de video en la carpeta especificada")
+                            ], className="text-center")
+                        ], color="light")
+                    ])
+                ])
+            ]),
+            
+            # Toast para notificaciones
+            dbc.Toast(
+                id="files-toast", header="Notificación", is_open=False,
+                dismissable=True, duration=4000,
+                style={"position": "fixed", "top": 66, "right": 10, 
+                      "width": 350, "z-index": 9999}
+            )
+            
         ], fluid=True)
     
     def _setup_keyboard_callbacks(self):
@@ -810,11 +917,12 @@ class AdvancedAnnotationSuite:
             [Output('page-content', 'children'),
              Output('current-page', 'data')],
             [Input('nav-home', 'n_clicks'),
-             Input('nav-annotation', 'n_clicks')],
+             Input('nav-annotation', 'n_clicks'),
+             Input('nav-files', 'n_clicks')],
             [State('current-page', 'data')],
             prevent_initial_call=False
         )
-        def navigate_pages(nav_home, nav_annotation, current_page):
+        def navigate_pages(nav_home, nav_annotation, nav_files, current_page):
             """Manejar la navegación entre páginas"""
             ctx = callback_context
             if not ctx.triggered:
@@ -827,6 +935,8 @@ class AdvancedAnnotationSuite:
                 return self.create_home_page(), {'page': 'home'}
             elif button_id == 'nav-annotation':
                 return self.create_annotation_page(), {'page': 'annotation'}
+            elif button_id == 'nav-files':
+                return self.create_files_page(), {'page': 'files'}
             
             # Por defecto, mantener la página actual
             current_page = current_page or {'page': 'home'}
@@ -834,6 +944,8 @@ class AdvancedAnnotationSuite:
                 return self.create_home_page(), current_page
             elif current_page['page'] == 'annotation':
                 return self.create_annotation_page(), current_page
+            elif current_page['page'] == 'files':
+                return self.create_files_page(), current_page
             else:
                 return self.create_home_page(), {'page': 'home'}
         
@@ -861,6 +973,19 @@ class AdvancedAnnotationSuite:
             """Abrir herramienta de anotación desde el botón en la página de inicio"""
             if btn_clicks:
                 return self.create_annotation_page(), {'page': 'annotation'}
+            return no_update, no_update
+        
+        # Callback para volver al inicio desde archivos
+        @self.app.callback(
+            [Output('page-content', 'children', allow_duplicate=True),
+             Output('current-page', 'data', allow_duplicate=True)],
+            [Input('back-home-files', 'n_clicks')],
+            prevent_initial_call=True
+        )
+        def go_back_home_from_files(back_clicks):
+            """Volver al inicio desde la página de archivos"""
+            if back_clicks:
+                return self.create_home_page(), {'page': 'home'}
             return no_update, no_update
     
     # Métodos de implementación de callbacks
@@ -1085,6 +1210,471 @@ class AdvancedAnnotationSuite:
             return no_update, no_update, no_update, True, error_message
         
         return no_update, no_update, no_update, no_update, no_update
+
+    def _setup_files_callbacks(self):
+        """Configurar callbacks para la gestión de archivos"""
+        # Importar el procesador de videos
+        from utils.video_processor import VideoProcessor
+        
+        # Callback para cargar videos cuando se actualiza la página o datos
+        @self.app.callback(
+            [Output('videos-data', 'data'),
+             Output('videos-stats', 'children'),
+             Output('videos-grid', 'children')],
+            [Input('refresh-videos-btn', 'n_clicks'),
+             Input('videos-folder-path', 'value'),
+             Input('processing-status', 'data')],
+            [State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def load_videos(refresh_clicks, videos_folder, processing_status, current_page):
+            """Cargar lista de videos de la carpeta"""
+            # Solo ejecutar si estamos en la página de archivos
+            if current_page and current_page.get('page') != 'files':
+                return no_update, no_update, no_update
+            
+            try:
+                processor = VideoProcessor(videos_folder or "videos")
+                videos = processor.get_video_files()
+                stats = processor.get_video_stats()
+                
+                # Generar estadísticas
+                stats_content = html.Div([
+                    html.H6([
+                        html.I(className="fas fa-chart-bar me-2"),
+                        "Estadísticas de Videos"
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{len(videos)}", className="mb-0"),
+                                html.Small("Videos encontrados")
+                            ], color="info", className="text-center")
+                        ], md=3),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{stats.get('total_size', 'N/A')}", className="mb-0"),
+                                html.Small("Tamaño total")
+                            ], color="success", className="text-center")
+                        ], md=3),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{sum(1 for v in videos if v.get('has_frames', False))}", className="mb-0"),
+                                html.Small("Con frames")
+                            ], color="warning", className="text-center")
+                        ], md=3),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{sum(1 for v in videos if not v.get('has_frames', False))}", className="mb-0"),
+                                html.Small("Por procesar")
+                            ], color="danger", className="text-center")
+                        ], md=3)
+                    ])
+                ])
+                
+                # Generar grid de videos
+                grid = self._create_videos_grid(videos, processing_status)
+                
+                return videos, stats_content, grid
+                
+            except Exception as e:
+                print(f"Error cargando videos: {e}")
+                error_stats = dbc.Alert([
+                    html.H6("❌ Error"),
+                    html.P(f"Error cargando videos: {str(e)}")
+                ], color="danger")
+                
+                return [], error_stats, []
+        
+        # Callback separado para cargar videos inicialmente cuando se entra a la página de archivos  
+        @self.app.callback(
+            [Output('videos-data', 'data', allow_duplicate=True)],
+            [Input('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def load_videos_on_page_load(current_page):
+            """Cargar videos cuando se entra a la página de archivos"""
+            if not current_page or current_page.get('page') != 'files':
+                return [no_update]
+                
+            try:
+                processor = VideoProcessor("videos")  # carpeta por defecto
+                videos = processor.get_video_files()
+                return [videos]
+                
+            except Exception as e:
+                print(f"Error cargando videos iniciales: {e}")
+                return [[]]
+        
+        # Callback para actualizar componentes visuales cuando cambia videos-data
+        @self.app.callback(
+            [Output('videos-stats', 'children', allow_duplicate=True),
+             Output('videos-grid', 'children', allow_duplicate=True)],
+            [Input('videos-data', 'data')],
+            [State('current-page', 'data'),
+             State('processing-status', 'data')],
+            prevent_initial_call=True
+        )
+        def update_videos_display(videos_data, current_page, processing_status):
+            """Actualizar display de videos cuando cambian los datos"""
+            # Solo ejecutar si estamos en la página de archivos
+            if not current_page or current_page.get('page') != 'files':
+                return no_update, no_update
+                
+            if not videos_data:
+                return no_update, no_update
+                
+            try:
+                processor = VideoProcessor("videos")
+                stats = processor.get_video_stats()
+                
+                # Generar estadísticas
+                stats_content = html.Div([
+                    html.H6([
+                        html.I(className="fas fa-chart-bar me-2"),
+                        "Estadísticas de Videos"
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{len(videos_data)}", className="mb-0"),
+                                html.Small("Videos encontrados")
+                            ], color="info", className="text-center")
+                        ], md=3),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{stats.get('total_size', 'N/A')}", className="mb-0"),
+                                html.Small("Tamaño total")
+                            ], color="success", className="text-center")
+                        ], md=3),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{sum(1 for v in videos_data if v.get('has_frames', False))}", className="mb-0"),
+                                html.Small("Con frames")
+                            ], color="warning", className="text-center")
+                        ], md=3),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{sum(1 for v in videos_data if not v.get('has_frames', False))}", className="mb-0"),
+                                html.Small("Por procesar")
+                            ], color="danger", className="text-center")
+                        ], md=3)
+                    ])
+                ])
+                
+                # Generar grid de videos
+                grid = self._create_videos_grid(videos_data, processing_status or {})
+                
+                return stats_content, grid
+                
+            except Exception as e:
+                print(f"Error actualizando display de videos: {e}")
+                error_stats = dbc.Alert([
+                    html.H6("❌ Error"),
+                    html.P(f"Error: {str(e)}")
+                ], color="danger")
+                
+                return error_stats, []
+        
+        # Callback para convertir video a frames
+        @self.app.callback(
+            [Output('files-toast', 'is_open'),
+             Output('files-toast', 'children'),
+             Output('videos-data', 'data', allow_duplicate=True),
+             Output('processing-status', 'data', allow_duplicate=True)],
+            [Input({'type': 'convert-btn', 'index': ALL}, 'n_clicks')],
+            [State('videos-data', 'data'),
+             State('videos-folder-path', 'value'),
+             State('processing-status', 'data'),
+             State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def convert_video_to_frames(convert_clicks, videos_data, videos_folder, processing_status, current_page):
+            """Convertir video seleccionado a frames"""
+            # Solo ejecutar si estamos en la página de archivos
+            if current_page and current_page.get('page') != 'files':
+                return no_update, no_update, no_update, no_update
+            
+            # Verificar que no estamos en una página donde no existen estos componentes
+            try:
+                if not videos_data or not any(convert_clicks):
+                    return no_update, no_update, no_update, no_update
+            except Exception as e:
+                # Si hay error accediendo a los componentes, no hacer nada
+                return no_update, no_update, no_update, no_update
+            
+            ctx = callback_context
+            if not ctx.triggered:
+                return no_update, no_update, no_update, no_update
+            
+            try:
+                # Obtener el índice del video
+                button_id = json.loads(ctx.triggered[0]['prop_id'].split('.')[0])
+                video_idx = button_id['index']
+                
+                if 0 <= video_idx < len(videos_data):
+                    video_info = videos_data[video_idx]
+                    processor = VideoProcessor(videos_folder or "videos")
+                    
+                    # Crear la carpeta output si no existe
+                    output_base = os.path.join(os.getcwd(), 'output')
+                    os.makedirs(output_base, exist_ok=True)
+                    
+                    # Extraer frames usando el método original
+                    try:
+                        result = processor.extract_frames(
+                            video_path=video_info['file_path'],
+                            output_dir=os.path.join(output_base, video_info['name_without_ext']),
+                            frame_interval=15,  # Extraer 1 frame cada 15
+                            quality=95,
+                            callback=None
+                        )
+                        
+                        if result['success']:
+                            success = True
+                            frames_count = result['extracted_count']
+                            message = f"✅ Extraídos {frames_count} frames en output/{video_info['name_without_ext']}"
+                        else:
+                            success = False
+                            frames_count = 0
+                            message = result.get('error', 'Error desconocido')
+                            
+                    except Exception as extract_error:
+                        # Si falla el método original, intentar con el nuevo
+                        # Crear la carpeta output si no existe
+                        output_base = os.path.join(os.getcwd(), 'output')
+                        os.makedirs(output_base, exist_ok=True)
+                        
+                        success, message, frames_count = processor.extract_frames_simple(
+                            video_path=video_info['file_path'],
+                            output_folder=os.path.join(output_base, video_info['name_without_ext']),
+                            frame_interval=15
+                        )
+                    
+                    if success:
+                        # Actualizar datos
+                        videos_data[video_idx]['has_frames'] = True
+                        videos_data[video_idx]['existing_frames'] = frames_count
+                        
+                        toast_content = html.Div([
+                            html.H6("✅ Conversión Exitosa"),
+                            html.P(message)
+                        ])
+                        
+                        return True, toast_content, videos_data, {}
+                    else:
+                        toast_content = html.Div([
+                            html.H6("❌ Error en Conversión"),
+                            html.P(message)
+                        ])
+                        
+                        return True, toast_content, no_update, {}
+                        
+            except Exception as e:
+                toast_content = html.Div([
+                    html.H6("❌ Error"),
+                    html.P(f"Error convirtiendo video: {str(e)}")
+                ])
+                
+                return True, toast_content, no_update, {}
+            
+            return no_update, no_update, no_update, no_update
+        
+        # Callback para abrir herramienta de etiquetado
+        @self.app.callback(
+            [Output('page-content', 'children', allow_duplicate=True),
+             Output('current-page', 'data', allow_duplicate=True)],
+            [Input({'type': 'review-btn', 'index': ALL}, 'n_clicks')],
+            [State('videos-data', 'data'),
+             State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def open_annotation_tool_for_video(review_clicks, videos_data, current_page):
+            """Abrir herramienta de etiquetado para video específico"""
+            # Solo ejecutar si estamos en la página de archivos
+            if current_page and current_page.get('page') != 'files':
+                return no_update, no_update
+            
+            # Verificar que no estamos en una página donde no existen estos componentes
+            try:
+                if not videos_data or not any(review_clicks):
+                    return no_update, no_update
+            except Exception as e:
+                # Si hay error accediendo a los componentes, no hacer nada
+                return no_update, no_update
+            
+            ctx = callback_context
+            if not ctx.triggered:
+                return no_update, no_update
+            
+            try:
+                # Obtener el índice del video
+                button_id = json.loads(ctx.triggered[0]['prop_id'].split('.')[0])
+                video_idx = button_id['index']
+                
+                if 0 <= video_idx < len(videos_data):
+                    video_info = videos_data[video_idx]
+                    frames_folder = os.path.join('output', video_info['name_without_ext'])
+                    
+                    # Verificar que la carpeta de frames existe
+                    if not os.path.exists(frames_folder):
+                        print(f"❌ Error: La carpeta de frames {frames_folder} no existe")
+                        return no_update, no_update
+                    
+                    print(f"🔄 Cambiando a dataset: {frames_folder}")
+                    
+                    # Cambiar el dataset path para la herramienta de anotación
+                    self.dataset_path = frames_folder
+                    
+                    # Recargar imágenes y configuración para el nuevo dataset
+                    self._reload_dataset_for_folder(frames_folder)
+                    
+                    # Verificar que hay imágenes
+                    if not self.image_files:
+                        print(f"❌ Error: No se encontraron imágenes en {frames_folder}")
+                        return no_update, no_update
+                    
+                    print(f"✅ Dataset cargado exitosamente: {len(self.image_files)} imágenes")
+                    
+                    return self.create_annotation_page(), {'page': 'annotation'}
+                        
+            except Exception as e:
+                print(f"Error abriendo herramienta para video: {e}")
+                return no_update, no_update
+            
+            return no_update, no_update
+
+    def _create_videos_grid(self, videos, processing_status=None):
+        """Crear grid de tarjetas de video"""
+        if not videos:
+            return []
+        
+        processing_status = processing_status or {}
+        
+        cards = []
+        for idx, video in enumerate(videos):
+            # Verificar si está procesando
+            is_processing = processing_status.get(idx, False)
+            
+            # Determinar botones según el estado
+            if is_processing:
+                action_buttons = dbc.Button([
+                    dbc.Spinner(size="sm", className="me-2"),
+                    "Procesando..."
+                ], color="info", size="sm", className="w-100", disabled=True)
+                
+                status_badge = dbc.Badge([
+                    html.I(className="fas fa-cog fa-spin me-1"),
+                    "Extrayendo frames..."
+                ], color="info", className="mb-2")
+                
+            elif video['has_frames']:
+                action_buttons = dbc.ButtonGroup([
+                    dbc.Button([
+                        html.I(className="fas fa-tag me-2"),
+                        "Revisar"
+                    ], id={'type': 'review-btn', 'index': idx}, 
+                     color="success", size="sm"),
+                    dbc.Button([
+                        html.I(className="fas fa-sync me-2"),
+                        "Re-convertir"
+                    ], id={'type': 'convert-btn', 'index': idx}, 
+                     color="warning", size="sm", outline=True)
+                ], className="w-100")
+                
+                status_badge = dbc.Badge([
+                    html.I(className="fas fa-check me-1"),
+                    f"{video['existing_frames']} frames"
+                ], color="success", className="mb-2")
+            else:
+                action_buttons = dbc.Button([
+                    html.I(className="fas fa-play me-2"),
+                    "Convertir a Frames"
+                ], id={'type': 'convert-btn', 'index': idx}, 
+                 color="primary", size="sm", className="w-100")
+                
+                status_badge = dbc.Badge([
+                    html.I(className="fas fa-clock me-1"),
+                    "Sin procesar"
+                ], color="warning", className="mb-2")
+            
+            # Crear tarjeta
+            card = dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        # Status badge
+                        html.Div([status_badge], className="text-center"),
+                        
+                        # Información del video
+                        html.H6(video['name'], className="card-title text-truncate", 
+                               title=video['name']),
+                        
+                        html.Div([
+                            html.Small([
+                                html.I(className="fas fa-clock me-1"),
+                                video['duration_str']
+                            ], className="text-muted d-block"),
+                            html.Small([
+                                html.I(className="fas fa-expand-arrows-alt me-1"),
+                                video['resolution']
+                            ], className="text-muted d-block"),
+                            html.Small([
+                                html.I(className="fas fa-hdd me-1"),
+                                video['file_size_str']
+                            ], className="text-muted d-block"),
+                            html.Small([
+                                html.I(className="fas fa-film me-1"),
+                                f"{video['frame_count']} frames"
+                            ], className="text-muted d-block")
+                        ], className="mb-3"),
+                        
+                        # Botones de acción
+                        action_buttons
+                        
+                    ], className="p-3")
+                ], className="h-100 border-0 shadow-sm hover-card",
+                   style={"background": "rgba(45, 55, 72, 0.8)"})
+            ], md=6, lg=4, xl=3, className="mb-3")
+            
+            cards.append(card)
+        
+        return dbc.Row(cards)
+
+    def _reload_dataset_for_folder(self, folder_path):
+        """Recargar dataset para una carpeta específica"""
+        try:
+            # Actualizar ruta del dataset
+            self.dataset_path = folder_path
+            
+            # Recargar imágenes
+            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+            self.image_files = []
+            
+            if os.path.exists(folder_path):
+                for ext in image_extensions:
+                    pattern = os.path.join(folder_path, f"*{ext}")
+                    files = sorted(glob.glob(pattern, recursive=False))
+                    self.image_files.extend([os.path.basename(f) for f in files])
+            
+            # Resetear índice
+            self.current_image_index = 0
+            
+            # Recargar configuración de anotaciones y figure generator para la nueva ruta
+            if hasattr(self, 'annotation_manager'):
+                # Actualizar la ruta en el annotation manager
+                labels_path = os.path.join(folder_path, 'labels')
+                os.makedirs(labels_path, exist_ok=True)
+                self.annotation_manager.labels_path = labels_path
+            
+            if hasattr(self, 'figure_generator'):
+                # Actualizar la ruta en el figure generator
+                self.figure_generator.images_path = folder_path
+            
+            print(f"✅ Dataset recargado: {len(self.image_files)} imágenes en {folder_path}")
+            print(f"✅ Archivos encontrados: {self.image_files[:5]}...")  # Mostrar primeros 5
+            
+        except Exception as e:
+            print(f"Error recargando dataset: {e}")
 
 def main():
     """Función principal"""

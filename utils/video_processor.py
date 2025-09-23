@@ -12,8 +12,16 @@ import json
 from .config import Config
 
 class VideoProcessor:
-    def __init__(self):
-        self.supported_formats = Config.SUPPORTED_VIDEO_FORMATS
+    def __init__(self, videos_folder="videos"):
+        try:
+            from .config import Config
+            self.supported_formats = Config.SUPPORTED_VIDEO_FORMATS
+        except:
+            self.supported_formats = ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm']
+        
+        self.videos_folder = videos_folder
+        # Crear carpeta de videos si no existe
+        os.makedirs(videos_folder, exist_ok=True)
         
     def get_video_info(self, video_path):
         """Obtener información del video"""
@@ -65,6 +73,246 @@ class VideoProcessor:
             return codec.strip()
         except:
             return "Desconocido"
+    
+    def get_video_files(self):
+        """Obtener lista de archivos de video con información"""
+        videos = []
+        
+        if not os.path.exists(self.videos_folder):
+            return videos
+        
+        import glob
+        for format_ext in self.supported_formats:
+            pattern = os.path.join(self.videos_folder, f"*{format_ext}")
+            files = glob.glob(pattern)
+            
+            for file_path in files:
+                try:
+                    video_info = self._get_video_info_new(file_path)
+                    if video_info:
+                        videos.append(video_info)
+                except Exception as e:
+                    print(f"Error procesando video {file_path}: {e}")
+        
+        return sorted(videos, key=lambda x: x['name'])
+    
+    def _get_video_info_new(self, file_path):
+        """Obtener información de un video (nueva versión)"""
+        try:
+            cap = cv2.VideoCapture(file_path)
+            if not cap.isOpened():
+                return None
+            
+            # Obtener propiedades del video
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            duration = frame_count / fps if fps > 0 else 0
+            
+            # Obtener información del archivo
+            file_size = os.path.getsize(file_path)
+            file_name = os.path.basename(file_path)
+            name_without_ext = os.path.splitext(file_name)[0]
+            
+            # Verificar si ya existe carpeta de frames en output
+            frames_folder = os.path.join('output', name_without_ext)
+            has_frames = os.path.exists(frames_folder) and len(os.listdir(frames_folder)) > 0
+            
+            # Contar frames existentes si hay
+            existing_frames = 0
+            if has_frames:
+                import glob
+                frame_files = glob.glob(os.path.join(frames_folder, "*.jpg"))
+                existing_frames = len(frame_files)
+            
+            cap.release()
+            
+            return {
+                'file_path': file_path,
+                'name': file_name,
+                'name_without_ext': name_without_ext,
+                'duration': duration,
+                'duration_str': self._format_duration(duration),
+                'frame_count': frame_count,
+                'fps': fps,
+                'width': width,
+                'height': height,
+                'resolution': f"{width}x{height}",
+                'file_size': file_size,
+                'file_size_str': self._format_file_size(file_size),
+                'has_frames': has_frames,
+                'existing_frames': existing_frames,
+                'frames_folder': frames_folder,
+                'thumbnail': None
+            }
+        except Exception as e:
+            print(f"Error obteniendo info del video {file_path}: {e}")
+            return None
+    
+    def _format_duration(self, duration):
+        """Formatear duración en formato legible"""
+        if duration <= 0:
+            return "0:00"
+        
+        minutes = int(duration // 60)
+        seconds = int(duration % 60)
+        
+        if minutes >= 60:
+            hours = minutes // 60
+            minutes = minutes % 60
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        else:
+            return f"{minutes}:{seconds:02d}"
+    
+    def _format_file_size(self, size_bytes):
+        """Formatear tamaño de archivo"""
+        if size_bytes == 0:
+            return "0 B"
+        
+        size_names = ["B", "KB", "MB", "GB"]
+        i = 0
+        while size_bytes >= 1024 and i < len(size_names) - 1:
+            size_bytes /= 1024.0
+            i += 1
+        
+        return f"{size_bytes:.1f} {size_names[i]}"
+    
+    def get_video_stats(self):
+        """Obtener estadísticas de los videos"""
+        videos = self.get_video_files()
+        
+        total_videos = len(videos)
+        total_size = sum(v['file_size'] for v in videos)
+        total_duration = sum(v['duration'] for v in videos)
+        videos_with_frames = sum(1 for v in videos if v['has_frames'])
+        total_frames_extracted = sum(v['existing_frames'] for v in videos if v['has_frames'])
+        
+        return {
+            'total_videos': total_videos,
+            'total_size': total_size,
+            'total_size_str': self._format_file_size(total_size),
+            'total_duration': total_duration,
+            'total_duration_str': self._format_duration(total_duration),
+            'videos_with_frames': videos_with_frames,
+            'videos_without_frames': total_videos - videos_with_frames,
+            'total_frames_extracted': total_frames_extracted
+        }
+    
+    def extract_frames(self, video_path, output_folder=None, frame_interval=1, max_frames=None, progress_callback=None):
+        """Extraer frames de un video (método simplificado)"""
+        try:
+            if not os.path.exists(video_path):
+                return False, "El archivo de video no existe", 0
+            
+            # Determinar carpeta de salida
+            if output_folder is None:
+                video_name = os.path.splitext(os.path.basename(video_path))[0]
+                output_folder = video_name
+            
+            # Crear carpeta de salida
+            os.makedirs(output_folder, exist_ok=True)
+            
+            # Abrir video
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                return False, "No se pudo abrir el video", 0
+            
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            extracted_count = 0
+            frame_number = 0
+            
+            print(f"Extrayendo frames de {video_path}")
+            print(f"Total frames: {total_frames}, Intervalo: {frame_interval}")
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Extraer frame cada 'frame_interval' frames
+                if frame_number % frame_interval == 0:
+                    frame_filename = f"frame_{frame_number}.jpg"
+                    frame_path = os.path.join(output_folder, frame_filename)
+                    
+                    # Guardar frame
+                    cv2.imwrite(frame_path, frame)
+                    extracted_count += 1
+                    
+                    # Callback de progreso
+                    if progress_callback:
+                        progress = (frame_number + 1) / total_frames * 100
+                        progress_callback(progress, extracted_count, frame_number + 1)
+                    
+                    # Verificar límite máximo
+                    if max_frames and extracted_count >= max_frames:
+                        break
+                
+                frame_number += 1
+            
+            cap.release()
+            
+            message = f"✅ Extraídos {extracted_count} frames en {output_folder}"
+            return True, message, extracted_count
+            
+        except Exception as e:
+            return False, f"Error extrayendo frames: {str(e)}", 0
+    
+    def extract_frames_simple(self, video_path, output_folder=None, frame_interval=15):
+        """Método simplificado para extraer frames (respaldo)"""
+        try:
+            if not os.path.exists(video_path):
+                return False, "El archivo de video no existe", 0
+            
+            # Determinar carpeta de salida
+            if output_folder is None:
+                video_name = os.path.splitext(os.path.basename(video_path))[0]
+                output_folder = video_name
+            
+            # Crear carpeta de salida
+            os.makedirs(output_folder, exist_ok=True)
+            
+            # Abrir video
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                return False, "No se pudo abrir el video", 0
+            
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            extracted_count = 0
+            frame_number = 0
+            
+            print(f"Extrayendo frames de {video_path} (método simple)")
+            print(f"Total frames: {total_frames}, Intervalo: {frame_interval}")
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Extraer frame cada 'frame_interval' frames
+                if frame_number % frame_interval == 0:
+                    frame_filename = f"frame_{frame_number}.jpg"
+                    frame_path = os.path.join(output_folder, frame_filename)
+                    
+                    # Guardar frame con calidad
+                    cv2.imwrite(frame_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                    extracted_count += 1
+                    
+                    if extracted_count % 10 == 0:
+                        print(f"Extraídos {extracted_count} frames...")
+                
+                frame_number += 1
+            
+            cap.release()
+            
+            message = f"✅ Extraídos {extracted_count} frames en {output_folder}"
+            print(message)
+            return True, message, extracted_count
+            
+        except Exception as e:
+            error_msg = f"Error extrayendo frames: {str(e)}"
+            print(error_msg)
+            return False, error_msg, 0
     
     def extract_frames(self, video_path, output_dir, frame_interval=30, 
                       max_frames=None, start_time=0, end_time=None, 
