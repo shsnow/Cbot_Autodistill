@@ -2647,11 +2647,12 @@ class AdvancedAnnotationSuite:
              State('training-batch-size', 'value'),
              State('training-lr', 'value'),
              State('training-img-size', 'value'),
+             State('training-patience', 'value'),
              State('current-page', 'data')],
             prevent_initial_call=True
         )
         def start_training(start_clicks, stop_clicks, dataset_path, epochs, batch_size, 
-                          learning_rate, image_size, current_page):
+                          learning_rate, image_size, patience, current_page):
             """Iniciar o detener el entrenamiento del modelo"""
             if not current_page or current_page.get('page') != 'training':
                 return no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update
@@ -2694,7 +2695,6 @@ class AdvancedAnnotationSuite:
                         return True, toast_message, False, True, 0, "Error", "", ""
                     
                     # Iniciar entrenamiento real con YOLOv8
-                    patience = 10  # Valor por defecto
                     return self._start_real_training(
                         dataset_path, epochs, batch_size, learning_rate, 
                         image_size, patience, len(train_images), len(train_labels)
@@ -2786,10 +2786,34 @@ class AdvancedAnnotationSuite:
                        status_message, no_update, no_update, no_update, no_update, no_update)
             
             else:
-                # Entrenamiento completado
+                # Entrenamiento completado - obtener resultados reales
+                training_results = getattr(self, 'training_progress', {}).get('results', None)
+                
+                # Extraer métricas reales si están disponibles
+                if training_results and hasattr(training_results, 'metrics'):
+                    try:
+                        metrics = training_results.metrics
+                        precision = f"{metrics.get('precision', [0])[-1]*100:.1f}%" if metrics.get('precision') else "N/A"
+                        recall = f"{metrics.get('recall', [0])[-1]*100:.1f}%" if metrics.get('recall') else "N/A"
+                        map50 = f"{metrics.get('mAP50', [0])[-1]:.3f}" if metrics.get('mAP50') else "N/A"
+                        map50_95 = f"{metrics.get('mAP50-95', [0])[-1]:.3f}" if metrics.get('mAP50-95') else "N/A"
+                    except:
+                        precision, recall, map50, map50_95 = "N/A", "N/A", "N/A", "N/A"
+                else:
+                    # Valores por defecto si no hay métricas disponibles
+                    precision, recall, map50, map50_95 = "Completado", "Ver terminal", "N/A", "best.pt"
+                
+                # Obtener información sobre Early Stopping si aplica
+                final_epoch = getattr(self, 'training_progress', {}).get('epoch', 0)
+                total_epochs = getattr(self, 'training_progress', {}).get('total_epochs', 100)
+                
+                early_stop_msg = ""
+                if final_epoch < total_epochs:
+                    early_stop_msg = f" (Early stopping en época {final_epoch}/{total_epochs})"
+                
                 status_message = dbc.Alert([
                     html.I(className="fas fa-check-circle me-2"),
-                    "✅ Entrenamiento completado exitosamente"
+                    f"✅ Entrenamiento completado exitosamente{early_stop_msg}"
                 ], color="success")
                 
                 results_final = html.Div([
@@ -2797,19 +2821,19 @@ class AdvancedAnnotationSuite:
                     dbc.Row([
                         dbc.Col([
                             dbc.Alert([
-                                html.H5("95.2%", className="mb-0"),
+                                html.H5(precision, className="mb-0"),
                                 html.Small("Precisión final")
                             ], color="success", className="text-center")
                         ], md=3),
                         dbc.Col([
                             dbc.Alert([
-                                html.H5("92.8%", className="mb-0"),
+                                html.H5(recall, className="mb-0"), 
                                 html.Small("Recall promedio")
                             ], color="info", className="text-center")
                         ], md=3),
                         dbc.Col([
                             dbc.Alert([
-                                html.H5("0.85", className="mb-0"),
+                                html.H5(map50, className="mb-0"),
                                 html.Small("mAP@0.5")
                             ], color="warning", className="text-center")
                         ], md=3),
@@ -2821,17 +2845,101 @@ class AdvancedAnnotationSuite:
                         ], md=3)
                     ]),
                     html.Hr(),
-                    html.P([
-                        html.I(className="fas fa-save me-2"),
-                        "Modelo entrenado guardado en: ",
-                        html.Code("runs/train/exp/weights/best.pt")
-                    ], className="mb-0")
+                    dbc.Row([
+                        dbc.Col([
+                            html.P([
+                                html.I(className="fas fa-save me-2"),
+                                "Modelo entrenado guardado en: ",
+                                html.Code("runs/detect/train/weights/best.pt")
+                            ], className="mb-1"),
+                            html.P([
+                                html.I(className="fas fa-clock me-2"),
+                                f"Patience configurado: {getattr(self, 'last_patience', 10)} épocas"
+                            ], className="mb-1"),
+                            html.P([
+                                html.I(className="fas fa-info-circle me-2"),
+                                "Revisa la terminal para logs detallados del entrenamiento"
+                            ], className="mb-0 text-muted")
+                        ])
+                    ])
                 ])
                 
                 toast_message = dbc.Alert("🎉 ¡Entrenamiento completado exitosamente!", color="success")
                 
                 return (100, "Completado ✅", status_message, results_final, 
                        True, toast_message, False, True)
+
+    def _validate_and_clean_labels(self, dataset_path):
+        """Validar y limpiar las etiquetas del dataset para evitar errores de CUDA"""
+        from pathlib import Path
+        
+        max_class_idx = -1
+        corrupted_files = []
+        
+        # Validar etiquetas de entrenamiento y validación
+        for split in ['train', 'valid']:
+            labels_dir = dataset_path / split / 'labels'
+            if not labels_dir.exists():
+                continue
+                
+            print(f"📝 Validando etiquetas en {split}...")
+            label_files = list(labels_dir.glob('*.txt'))
+            
+            for label_file in label_files:
+                try:
+                    with open(label_file, 'r') as f:
+                        lines = f.readlines()
+                    
+                    cleaned_lines = []
+                    for line_num, line in enumerate(lines):
+                        line = line.strip()
+                        if not line:
+                            continue
+                            
+                        parts = line.split()
+                        if len(parts) < 5:  # class_id x_center y_center width height
+                            print(f"⚠️ Línea inválida en {label_file}:{line_num+1}: {line}")
+                            continue
+                        
+                        try:
+                            class_id = int(float(parts[0]))
+                            x_center = float(parts[1])
+                            y_center = float(parts[2])
+                            width = float(parts[3])
+                            height = float(parts[4])
+                            
+                            # Validar que el class_id esté en rango válido
+                            if class_id < 0:
+                                print(f"⚠️ Clase negativa en {label_file}:{line_num+1}: {class_id}")
+                                continue
+                                
+                            # Validar que las coordenadas estén entre 0 y 1
+                            if not (0 <= x_center <= 1 and 0 <= y_center <= 1 and 
+                                   0 <= width <= 1 and 0 <= height <= 1):
+                                print(f"⚠️ Coordenadas fuera de rango en {label_file}:{line_num+1}: {line}")
+                                continue
+                            
+                            max_class_idx = max(max_class_idx, class_id)
+                            cleaned_lines.append(f"{class_id} {x_center} {y_center} {width} {height}\n")
+                            
+                        except ValueError as e:
+                            print(f"⚠️ Error parseando línea en {label_file}:{line_num+1}: {line} - {e}")
+                            continue
+                    
+                    # Escribir las líneas limpias de vuelta al archivo
+                    if len(cleaned_lines) != len(lines):
+                        print(f"🧹 Limpiando {label_file}: {len(lines)} → {len(cleaned_lines)} líneas")
+                        with open(label_file, 'w') as f:
+                            f.writelines(cleaned_lines)
+                    
+                except Exception as e:
+                    print(f"❌ Error procesando {label_file}: {e}")
+                    corrupted_files.append(str(label_file))
+        
+        if corrupted_files:
+            print(f"⚠️ Se encontraron {len(corrupted_files)} archivos con problemas")
+        
+        return max_class_idx
 
     def _start_real_training(self, dataset_path, epochs, batch_size, learning_rate, 
                            image_size, patience, train_images_count, train_labels_count):
@@ -2880,6 +2988,25 @@ class AdvancedAnnotationSuite:
             print(f"   - Train images: {train_images_count}")
             print(f"   - Train labels: {train_labels_count}")
             
+            # Validar y limpiar etiquetas antes del entrenamiento
+            print("🔍 Validando y limpiando etiquetas del dataset...")
+            max_class_idx = self._validate_and_clean_labels(dataset_path)
+            
+            if max_class_idx >= 0:  # Solo validar si encontramos etiquetas
+                if max_class_idx >= len(self.classes):
+                    print(f"❌ Error: Se encontraron clases con índice {max_class_idx} pero solo hay {len(self.classes)} clases definidas")
+                    print(f"   Clases válidas: {list(range(len(self.classes)))}")
+                    print(f"   Nombres de clases: {self.classes}")
+                    return
+                else:
+                    print(f"✅ Etiquetas validadas correctamente")
+                    print(f"   - Índice máximo de clase encontrado: {max_class_idx}")
+                    print(f"   - Número de clases definidas: {len(self.classes)}")
+                    print(f"   - Clases: {self.classes}")
+            else:
+                print("⚠️ No se encontraron etiquetas válidas en el dataset")
+                return
+            
             # Inicializar progreso compartido
             if not hasattr(self, 'training_progress'):
                 self.training_progress = {'progress': 0, 'status': 'starting', 'epoch': 0, 'loss': 0}
@@ -2891,6 +3018,9 @@ class AdvancedAnnotationSuite:
                 'loss': 0,
                 'total_epochs': epochs
             }
+            
+            # Guardar patience para mostrar en resultados
+            self.last_patience = patience
             
             # Función para entrenar en hilo separado
             def train_model():
