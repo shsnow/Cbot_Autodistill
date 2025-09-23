@@ -692,12 +692,3 @@ print("ERROR changing class: ...")              # Errores
 - [ ] Sistema de comentarios en anotaciones
 - [ ] Historial de cambios por usuario
 
-## 📄 Licencia
-
-Este proyecto está bajo licencia [MIT](LICENSE). Siéntete libre de usar, modificar y distribuir según los términos de la licencia.
-
----
-
-**Desarrollado con ❤️ para la comunidad de Computer Vision**
-
-¿Preguntas o sugerencias? Abre un [issue](../../issues) o contribuye al proyecto!

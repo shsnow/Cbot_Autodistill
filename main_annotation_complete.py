@@ -31,7 +31,7 @@ app = dash.Dash(
     suppress_callback_exceptions=True
 )
 
-app.title = "AutoDistill Suite - Herramienta de Anotación Completa"
+app.title = "Cbot Suite - Herramienta de Anotación Completa"
 
 class AdvancedAnnotationSuite:
     def __init__(self, app):
@@ -100,7 +100,7 @@ class AdvancedAnnotationSuite:
                 dbc.NavItem(dbc.NavLink("🤖 AutoDistill", id="nav-autodistill", href="#")),
                 dbc.NavItem(dbc.NavLink("📁 Archivos", id="nav-files", href="#")),
             ],
-            brand="AutoDistill Suite - Herramienta de Anotación",
+            brand="Cbot Suite - Herramienta de etiquetado",
             brand_href="#",
             color="dark",
             dark=True,
@@ -501,13 +501,14 @@ class AdvancedAnnotationSuite:
         self._setup_utility_callbacks()
         self._setup_page_callbacks()
         self._setup_files_callbacks()
+        self._setup_autodistill_callbacks()
     
     def create_home_page(self):
         """Crear la página de inicio"""
         return dbc.Container([
             dbc.Row([
                 dbc.Col([
-                    html.H1("🚀 AutoDistill Suite", className="text-center mb-4"),
+                    html.H1("🚀 Cbot Suite", className="text-center mb-4"),
                     html.P("Suite completa para anotación de datos y entrenamiento automático", 
                           className="text-center text-muted mb-5")
                 ])
@@ -641,6 +642,205 @@ class AdvancedAnnotationSuite:
             # Toast para notificaciones
             dbc.Toast(
                 id="files-toast", header="Notificación", is_open=False,
+                dismissable=True, duration=4000,
+                style={"position": "fixed", "top": 66, "right": 10, 
+                      "width": 350, "z-index": 9999}
+            )
+            
+        ], fluid=True)
+    
+    def create_autodistill_page(self):
+        """Crear la página de AutoDistill para etiquetado automático"""
+        return dbc.Container([
+            # Header de la página
+            dbc.Row([
+                dbc.Col([
+                    html.Div([
+                        dbc.Button("← Volver al Inicio", id="back-home-autodistill", 
+                                 color="secondary", className="mb-3"),
+                        html.H2([
+                            html.I(className="fas fa-robot me-3", style={"color": "#00d4aa"}),
+                            "AutoDistill - Etiquetado Automático"
+                        ], className="mb-4"),
+                        html.P("Utiliza IA para etiquetar automáticamente tus imágenes usando modelos base", 
+                              className="text-muted mb-4")
+                    ])
+                ])
+            ]),
+            
+            # Stores para datos de autodistill
+            dcc.Store(id='autodistill-datasets', data=[]),
+            dcc.Store(id='autodistill-config', data={}),
+            dcc.Store(id='autodistill-status', data={'running': False, 'progress': 0}),
+            
+            # Panel de selección de dataset
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-database me-2", style={"color": "#00d4aa"}),
+                                "Selección de Dataset"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Dataset a etiquetar:", className="fw-bold mb-2"),
+                                    dbc.Select(
+                                        id="autodistill-dataset-selector",
+                                        placeholder="Selecciona un dataset generado...",
+                                        className="mb-3"
+                                    ),
+                                    dbc.Button([
+                                        html.I(className="fas fa-sync me-2"),
+                                        "Actualizar Lista de Datasets"
+                                    ], id="refresh-datasets-btn", color="info", outline=True, 
+                                     className="w-100")
+                                ], md=6),
+                                dbc.Col([
+                                    html.Label("Información del Dataset:", className="fw-bold mb-2"),
+                                    dbc.Alert(id="autodistill-dataset-info", color="light", className="mb-3"),
+                                ], md=6)
+                            ])
+                        ])
+                    ], className="mb-4")
+                ])
+            ]),
+            
+            # Configuración de Ontología
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-tags me-2", style={"color": "#feca57"}),
+                                "Configuración de Ontología"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Modelo Base:", className="fw-bold mb-2"),
+                                    dbc.Select(
+                                        id="base-model-selector",
+                                        options=[
+                                            {"label": "YOLO World (Rápido)", "value": "yolo_world"},
+                                            {"label": "Grounding DINO (Preciso)", "value": "grounding_dino"},
+                                            {"label": "OWL-ViT (Equilibrado)", "value": "owl_vit"}
+                                        ],
+                                        value="yolo_world",
+                                        className="mb-3"
+                                    ),
+                                    html.Label("Confianza mínima:", className="fw-bold mb-2"),
+                                    dbc.Input(
+                                        id="confidence-threshold",
+                                        type="number",
+                                        value=0.3,
+                                        min=0.1,
+                                        max=0.9,
+                                        step=0.1,
+                                        className="mb-3"
+                                    )
+                                ], md=6),
+                                dbc.Col([
+                                    html.Label("Clases a detectar (una por línea):", className="fw-bold mb-2"),
+                                    dbc.Textarea(
+                                        id="ontology-classes",
+                                        placeholder="person\ncar\ntraffic light\nstop sign\nbus\ntruck",
+                                        value="person\ncar\ntraffic light\nstop sign\nbus\ntruck",
+                                        rows=8,
+                                        className="mb-3"
+                                    )
+                                ], md=6)
+                            ]),
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Alert([
+                                        html.I(className="fas fa-info-circle me-2"),
+                                        html.Strong("Tip: "),
+                                        "Usa nombres en inglés y simples. Evita frases complejas. Ejemplo: 'car' en lugar de 'red sports car'."
+                                    ], color="info", className="mb-0")
+                                ])
+                            ])
+                        ])
+                    ], className="mb-4")
+                ])
+            ]),
+            
+            # Panel de Control de Ejecución
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-play me-2", style={"color": "#48bb78"}),
+                                "Control de Ejecución"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Button([
+                                        html.I(className="fas fa-robot me-2"),
+                                        "Iniciar AutoDistill"
+                                    ], id="autodistill-start-btn", color="success", size="lg", 
+                                     className="w-100 mb-3", disabled=True),
+                                    dbc.Button([
+                                        html.I(className="fas fa-stop me-2"),
+                                        "Detener Proceso"
+                                    ], id="autodistill-stop-btn", color="danger", size="lg", 
+                                     className="w-100", disabled=True)
+                                ], md=4),
+                                dbc.Col([
+                                    html.Label("Progreso:", className="fw-bold mb-2"),
+                                    dbc.Progress(id="autodistill-progress", value=0, striped=True, 
+                                               animated=False, className="mb-3"),
+                                    html.Div(id="autodistill-status", className="text-center"),
+                                ], md=8)
+                            ])
+                        ])
+                    ], className="mb-4")
+                ])
+            ]),
+            
+            # Resultados
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-chart-pie me-2", style={"color": "#9f7aea"}),
+                                "Resultados del Etiquetado"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            html.Div(id="autodistill-results", children=[
+                                dbc.Alert([
+                                    html.Div([
+                                        html.I(className="fas fa-info-circle fa-2x mb-3", 
+                                              style={"color": "#6c757d"}),
+                                        html.H5("Ejecuta AutoDistill para ver resultados", className="text-muted"),
+                                        html.P("Selecciona un dataset, configura la ontología y presiona 'Iniciar AutoDistill'")
+                                    ], className="text-center")
+                                ], color="light")
+                            ])
+                        ])
+                    ], className="mb-4")
+                ])
+            ]),
+            
+            # Componente de intervalo para monitorear progreso
+            dcc.Interval(
+                id='autodistill-progress-interval',
+                interval=3000,  # Actualizar cada 3 segundos
+                n_intervals=0,
+                disabled=True
+            ),
+            
+            # Toast para notificaciones
+            dbc.Toast(
+                id="autodistill-toast", header="AutoDistill", is_open=False,
                 dismissable=True, duration=4000,
                 style={"position": "fixed", "top": 66, "right": 10, 
                       "width": 350, "z-index": 9999}
@@ -918,11 +1118,12 @@ class AdvancedAnnotationSuite:
              Output('current-page', 'data')],
             [Input('nav-home', 'n_clicks'),
              Input('nav-annotation', 'n_clicks'),
+             Input('nav-autodistill', 'n_clicks'),
              Input('nav-files', 'n_clicks')],
             [State('current-page', 'data')],
             prevent_initial_call=False
         )
-        def navigate_pages(nav_home, nav_annotation, nav_files, current_page):
+        def navigate_pages(nav_home, nav_annotation, nav_autodistill, nav_files, current_page):
             """Manejar la navegación entre páginas"""
             ctx = callback_context
             if not ctx.triggered:
@@ -935,6 +1136,8 @@ class AdvancedAnnotationSuite:
                 return self.create_home_page(), {'page': 'home'}
             elif button_id == 'nav-annotation':
                 return self.create_annotation_page(), {'page': 'annotation'}
+            elif button_id == 'nav-autodistill':
+                return self.create_autodistill_page(), {'page': 'autodistill'}
             elif button_id == 'nav-files':
                 return self.create_files_page(), {'page': 'files'}
             
@@ -984,6 +1187,19 @@ class AdvancedAnnotationSuite:
         )
         def go_back_home_from_files(back_clicks):
             """Volver al inicio desde la página de archivos"""
+            if back_clicks:
+                return self.create_home_page(), {'page': 'home'}
+            return no_update, no_update
+        
+        # Callback para volver al inicio desde autodistill
+        @self.app.callback(
+            [Output('page-content', 'children', allow_duplicate=True),
+             Output('current-page', 'data', allow_duplicate=True)],
+            [Input('back-home-autodistill', 'n_clicks')],
+            prevent_initial_call=True
+        )
+        def go_back_home_from_autodistill(back_clicks):
+            """Volver al inicio desde la página de autodistill"""
             if back_clicks:
                 return self.create_home_page(), {'page': 'home'}
             return no_update, no_update
@@ -1236,6 +1452,10 @@ class AdvancedAnnotationSuite:
             try:
                 processor = VideoProcessor(videos_folder or "videos")
                 videos = processor.get_video_files()
+                
+                # Expandir videos para incluir subdatasets de AutoDistill
+                expanded_videos = self._expand_videos_with_subdatasets(videos)
+                
                 stats = processor.get_video_stats()
                 
                 # Generar estadísticas
@@ -1247,35 +1467,35 @@ class AdvancedAnnotationSuite:
                     dbc.Row([
                         dbc.Col([
                             dbc.Alert([
-                                html.H5(f"{len(videos)}", className="mb-0"),
-                                html.Small("Videos encontrados")
+                                html.H5(f"{len(expanded_videos)}", className="mb-0"),
+                                html.Small("Datasets encontrados")
                             ], color="info", className="text-center")
                         ], md=3),
                         dbc.Col([
                             dbc.Alert([
-                                html.H5(f"{stats.get('total_size', 'N/A')}", className="mb-0"),
-                                html.Small("Tamaño total")
-                            ], color="success", className="text-center")
-                        ], md=3),
-                        dbc.Col([
-                            dbc.Alert([
-                                html.H5(f"{sum(1 for v in videos if v.get('has_frames', False))}", className="mb-0"),
+                                html.H5(f"{sum(1 for v in expanded_videos if v.get('has_frames', False))}", className="mb-0"),
                                 html.Small("Con frames")
                             ], color="warning", className="text-center")
-                        ], md=3),
+                        ], md=2),
                         dbc.Col([
                             dbc.Alert([
-                                html.H5(f"{sum(1 for v in videos if not v.get('has_frames', False))}", className="mb-0"),
+                                html.H5(f"{self._count_autodistill_labeled(expanded_videos)}", className="mb-0"),
+                                html.Small("Etiquetados AI")
+                            ], color="info", className="text-center")
+                        ], md=2),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{sum(1 for v in expanded_videos if not v.get('has_frames', False))}", className="mb-0"),
                                 html.Small("Por procesar")
                             ], color="danger", className="text-center")
-                        ], md=3)
+                        ], md=2)
                     ])
                 ])
                 
                 # Generar grid de videos
-                grid = self._create_videos_grid(videos, processing_status)
+                grid = self._create_videos_grid(expanded_videos, processing_status)
                 
-                return videos, stats_content, grid
+                return expanded_videos, stats_content, grid
                 
             except Exception as e:
                 print(f"Error cargando videos: {e}")
@@ -1343,22 +1563,22 @@ class AdvancedAnnotationSuite:
                         ], md=3),
                         dbc.Col([
                             dbc.Alert([
-                                html.H5(f"{stats.get('total_size', 'N/A')}", className="mb-0"),
-                                html.Small("Tamaño total")
-                            ], color="success", className="text-center")
-                        ], md=3),
-                        dbc.Col([
-                            dbc.Alert([
                                 html.H5(f"{sum(1 for v in videos_data if v.get('has_frames', False))}", className="mb-0"),
                                 html.Small("Con frames")
                             ], color="warning", className="text-center")
-                        ], md=3),
+                        ], md=2),
+                        dbc.Col([
+                            dbc.Alert([
+                                html.H5(f"{self._count_autodistill_labeled(videos_data)}", className="mb-0"),
+                                html.Small("Etiquetados AI")
+                            ], color="info", className="text-center")
+                        ], md=2),
                         dbc.Col([
                             dbc.Alert([
                                 html.H5(f"{sum(1 for v in videos_data if not v.get('has_frames', False))}", className="mb-0"),
                                 html.Small("Por procesar")
                             ], color="danger", className="text-center")
-                        ], md=3)
+                        ], md=2)
                     ])
                 ])
                 
@@ -1514,14 +1734,21 @@ class AdvancedAnnotationSuite:
                 
                 if 0 <= video_idx < len(videos_data):
                     video_info = videos_data[video_idx]
-                    frames_folder = os.path.join('output', video_info['name_without_ext'])
+                    
+                    # Determinar la carpeta correcta según si es subdataset o no
+                    if video_info.get('is_subdataset', False):
+                        # Para subdatasets, usar la ruta de imágenes directamente
+                        frames_folder = video_info.get('images_path', video_info['path'])
+                        print(f"🔄 Cambiando a subdataset: {frames_folder}")
+                    else:
+                        # Para videos originales, usar la estructura tradicional
+                        frames_folder = os.path.join('output', video_info['name_without_ext'])
+                        print(f"🔄 Cambiando a dataset: {frames_folder}")
                     
                     # Verificar que la carpeta de frames existe
                     if not os.path.exists(frames_folder):
                         print(f"❌ Error: La carpeta de frames {frames_folder} no existe")
                         return no_update, no_update
-                    
-                    print(f"🔄 Cambiando a dataset: {frames_folder}")
                     
                     # Cambiar el dataset path para la herramienta de anotación
                     self.dataset_path = frames_folder
@@ -1544,8 +1771,277 @@ class AdvancedAnnotationSuite:
             
             return no_update, no_update
 
+    def _setup_autodistill_callbacks(self):
+        """Configurar callbacks para AutoDistill"""
+        from pathlib import Path
+        import os
+        
+        # Callback para cargar datasets disponibles cuando se entra a la página de AutoDistill
+        @self.app.callback(
+            Output('autodistill-dataset-selector', 'options'),
+            [Input('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def load_available_datasets(current_page):
+            """Cargar datasets disponibles desde la carpeta output"""
+            if not current_page or current_page.get('page') != 'autodistill':
+                return no_update
+            
+            try:
+                output_path = Path('output')
+                if not output_path.exists():
+                    return []
+                
+                options = []
+                for folder in output_path.iterdir():
+                    if folder.is_dir():
+                        # Verificar que la carpeta contiene imágenes
+                        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                        has_images = any(
+                            any(folder.glob(f'*{ext}')) for ext in image_extensions
+                        )
+                        
+                        if has_images:
+                            # Contar imágenes
+                            image_count = sum(
+                                len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
+                            )
+                            
+                            options.append({
+                                'label': f"{folder.name} ({image_count} imágenes)",
+                                'value': str(folder)
+                            })
+                
+                return sorted(options, key=lambda x: x['label'])
+                
+            except Exception as e:
+                print(f"Error cargando datasets: {e}")
+                return []
+        
+        # Callback para ejecutar AutoDistill
+        @self.app.callback(
+            [Output('autodistill-progress', 'value'),
+             Output('autodistill-progress', 'label'),
+             Output('autodistill-status', 'children'),
+             Output('autodistill-results', 'children'),
+             Output('autodistill-start-btn', 'disabled'),
+             Output('autodistill-stop-btn', 'disabled'),
+             Output('autodistill-progress-interval', 'disabled')],
+            [Input('autodistill-start-btn', 'n_clicks'),
+             Input('autodistill-stop-btn', 'n_clicks')],
+            [State('autodistill-dataset-selector', 'value'),
+             State('base-model-selector', 'value'),
+             State('ontology-classes', 'value'),
+             State('confidence-threshold', 'value'),
+             State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def execute_autodistill(start_clicks, stop_clicks, dataset_path, base_model, 
+                              ontology_text, confidence_threshold, current_page):
+            """Ejecutar proceso de AutoDistill"""
+            # Solo ejecutar si estamos en la página correcta
+            if not current_page or current_page.get('page') != 'autodistill':
+                return no_update, no_update, no_update, no_update, no_update, no_update
+            
+            ctx = callback_context
+            if not ctx.triggered:
+                return no_update, no_update, no_update, no_update, no_update, no_update
+            
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            
+            # Botón stop presionado
+            if triggered_id == 'autodistill-stop-btn':
+                return (0, "Detenido", 
+                       dbc.Alert("❌ Proceso detenido por el usuario", color="warning"),
+                       "", False, True, True)  # Desactivar interval
+            
+            # Botón start presionado
+            if triggered_id == 'autodistill-start-btn' and start_clicks:
+                # Validar entradas
+                if not dataset_path:
+                    return (0, "Error", 
+                           dbc.Alert("❌ Por favor selecciona un dataset", color="danger"),
+                           "", False, True, True)  # Desactivar interval
+                
+                if not ontology_text.strip():
+                    return (0, "Error", 
+                           dbc.Alert("❌ Por favor define las clases en la ontología", color="danger"),
+                           "", False, True, True)  # Desactivar interval
+                
+                try:
+                    # Parsear ontología (formato simple: una clase por línea)
+                    classes = [line.strip() for line in ontology_text.strip().split('\n') 
+                              if line.strip()]
+                    
+                    if not classes:
+                        return (0, "Error", 
+                               dbc.Alert("❌ No se encontraron clases válidas en la ontología", color="danger"),
+                               "", False, True, True)  # Desactivar interval
+                    
+                    # Ejecutar AutoDistill real
+                    iou_threshold = 0.5  # Valor por defecto
+                    return self._run_autodistill_process(
+                        dataset_path, base_model, classes, 
+                        confidence_threshold, iou_threshold
+                    )
+                    
+                except Exception as e:
+                    error_msg = f"Error procesando: {str(e)}"
+                    return (0, "Error", 
+                           dbc.Alert(f"❌ {error_msg}", color="danger"),
+                           "", False, True, True)  # Desactivar interval
+            
+            return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+        
+        # Callback para actualizar información del dataset seleccionado
+        @self.app.callback(
+            Output('autodistill-dataset-info', 'children'),
+            [Input('autodistill-dataset-selector', 'value')],
+            prevent_initial_call=True
+        )
+        def update_dataset_info(dataset_path):
+            """Actualizar información del dataset seleccionado"""
+            if not dataset_path:
+                return ""
+            
+            try:
+                path = Path(dataset_path)
+                if not path.exists():
+                    return dbc.Alert("❌ Dataset no encontrado", color="danger")
+                
+                # Contar archivos
+                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                image_count = sum(
+                    len(list(path.glob(f'*{ext}'))) for ext in image_extensions
+                )
+                
+                # Verificar si ya tiene anotaciones
+                labels_path = path / 'labels'
+                has_labels = labels_path.exists() and any(labels_path.glob('*.txt'))
+                label_count = len(list(labels_path.glob('*.txt'))) if has_labels else 0
+                
+                # Calcular tamaño
+                total_size = sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
+                size_mb = total_size / (1024 * 1024)
+                
+                info = dbc.Card([
+                    dbc.CardBody([
+                        html.H6(f"📁 {path.name}", className="card-title"),
+                        html.P([
+                            html.I(className="fas fa-images me-2"),
+                            f"{image_count} imágenes"
+                        ], className="mb-1"),
+                        html.P([
+                            html.I(className="fas fa-tags me-2"),
+                            f"{label_count} anotaciones existentes" if has_labels 
+                            else "Sin anotaciones previas"
+                        ], className="mb-1"),
+                        html.P([
+                            html.I(className="fas fa-hdd me-2"),
+                            f"{size_mb:.1f} MB"
+                        ], className="mb-0")
+                    ])
+                ], color="light")
+                
+                return info
+                
+            except Exception as e:
+                return dbc.Alert(f"❌ Error: {str(e)}", color="danger")
+
+        # Callback para controlar estado del botón de inicio
+        @self.app.callback(
+            Output('autodistill-start-btn', 'disabled', allow_duplicate=True),
+            [Input('autodistill-dataset-selector', 'value'),
+             Input('ontology-classes', 'value'),
+             Input('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def control_start_button(dataset_path, ontology_text, current_page):
+            """Controlar si el botón de inicio debe estar habilitado"""
+            if not current_page or current_page.get('page') != 'autodistill':
+                return True  # Deshabilitar si no estamos en la página correcta
+            
+            # Habilitar solo si hay dataset seleccionado y ontología definida
+            if dataset_path and ontology_text and ontology_text.strip():
+                return False  # Habilitar botón
+            else:
+                return True   # Deshabilitar botón
+
+        # Callback para monitorear progreso de AutoDistill
+        @self.app.callback(
+            [Output('autodistill-progress', 'value', allow_duplicate=True),
+             Output('autodistill-progress', 'label', allow_duplicate=True),
+             Output('autodistill-status', 'children', allow_duplicate=True),
+             Output('autodistill-results', 'children', allow_duplicate=True),
+             Output('autodistill-progress-interval', 'disabled', allow_duplicate=True),
+             Output('autodistill-start-btn', 'disabled', allow_duplicate=True),
+             Output('autodistill-stop-btn', 'disabled', allow_duplicate=True)],
+            [Input('autodistill-progress-interval', 'n_intervals')],
+            [State('autodistill-dataset-selector', 'value'),
+             State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def monitor_autodistill_progress(n_intervals, dataset_path, current_page):
+            """Monitorear progreso de AutoDistill"""
+            if not current_page or current_page.get('page') != 'autodistill':
+                return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+            
+            if not dataset_path:
+                return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+            
+            try:
+                # Verificar si se han generado etiquetas en la carpeta base
+                labels_path = Path(dataset_path) / "labels"
+                
+                if labels_path.exists():
+                    label_files = list(labels_path.glob("*.txt"))
+                    
+                    if label_files:
+                        # Contar total de imágenes para calcular progreso
+                        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                        total_images = sum(
+                            len(list(Path(dataset_path).glob(f'*{ext}'))) 
+                            for ext in image_extensions
+                        )
+                        
+                        progress = min(100, int((len(label_files) / max(total_images, 1)) * 100))
+                        
+                        if progress >= 100:
+                            # Proceso completado y archivos reorganizados
+                            results = html.Div([
+                                html.H6("✅ AutoDistill Completado"),
+                                html.P(f"Se generaron {len(label_files)} anotaciones"),
+                                html.P(f"Las etiquetas están disponibles en la pestaña de Archivos"),
+                                dbc.Alert([
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "Puedes revisar y editar las anotaciones usando el botón 'Ver Etiquetado' en la pestaña de Archivos."
+                                ], color="info", className="mt-3")
+                            ])
+                            
+                            status = dbc.Alert([
+                                html.I(className="fas fa-check-circle me-2"),
+                                "✅ AutoDistill completado y archivos reorganizados"
+                            ], color="success")
+                            
+                            return progress, f"Completado {progress}%", status, results, False, True, True  # Proceso completado, botón start habilitado, stop deshabilitado, interval deshabilitado
+                        else:
+                            # En progreso
+                            status = dbc.Alert([
+                                html.I(className="fas fa-cog fa-spin me-2"),
+                                f"Procesando... {len(label_files)}/{total_images} imágenes"
+                            ], color="info")
+                            
+                            return progress, f"Progreso {progress}%", status, no_update, no_update, no_update, no_update
+                
+            except Exception as e:
+                print(f"Error monitoreando progreso: {e}")
+            
+            return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+
     def _create_videos_grid(self, videos, processing_status=None):
         """Crear grid de tarjetas de video"""
+        from pathlib import Path
+        
         if not videos:
             return []
         
@@ -1555,6 +2051,9 @@ class AdvancedAnnotationSuite:
         for idx, video in enumerate(videos):
             # Verificar si está procesando
             is_processing = processing_status.get(idx, False)
+            
+            # Verificar si es un subdataset de AutoDistill
+            is_subdataset = video.get('is_subdataset', False)
             
             # Determinar botones según el estado
             if is_processing:
@@ -1569,23 +2068,78 @@ class AdvancedAnnotationSuite:
                 ], color="info", className="mb-2")
                 
             elif video['has_frames']:
-                action_buttons = dbc.ButtonGroup([
-                    dbc.Button([
-                        html.I(className="fas fa-tag me-2"),
-                        "Revisar"
-                    ], id={'type': 'review-btn', 'index': idx}, 
-                     color="success", size="sm"),
-                    dbc.Button([
-                        html.I(className="fas fa-sync me-2"),
-                        "Re-convertir"
-                    ], id={'type': 'convert-btn', 'index': idx}, 
-                     color="warning", size="sm", outline=True)
-                ], className="w-100")
-                
-                status_badge = dbc.Badge([
-                    html.I(className="fas fa-check me-1"),
-                    f"{video['existing_frames']} frames"
-                ], color="success", className="mb-2")
+                if is_subdataset:
+                    # Para subdatasets de AutoDistill
+                    if video.get('has_labels', False):
+                        # Subdataset con etiquetas
+                        label_count = video.get('label_count', 0)
+                        action_buttons = dbc.Button([
+                            html.I(className="fas fa-robot me-2"),
+                            "Abrir Dataset AI"
+                        ], id={'type': 'review-btn', 'index': idx}, 
+                         color="info", size="sm", className="w-100")
+                        
+                        status_badge = dbc.Badge([
+                            html.I(className="fas fa-robot me-1"),
+                            f"AutoDistill - {video.get('dataset_type', 'Dataset').title()}"
+                        ], color="info", className="mb-2")
+                    else:
+                        # Subdataset solo con imágenes
+                        action_buttons = dbc.Button([
+                            html.I(className="fas fa-images me-2"),
+                            "Ver Imágenes"
+                        ], id={'type': 'review-btn', 'index': idx}, 
+                         color="secondary", size="sm", className="w-100")
+                        
+                        status_badge = dbc.Badge([
+                            html.I(className="fas fa-images me-1"),
+                            f"Solo imágenes - {video.get('dataset_type', 'Dataset').title()}"
+                        ], color="secondary", className="mb-2")
+                else:
+                    # Para videos originales
+                    # Verificar si tiene etiquetas de AutoDistill
+                    labels_path = Path('output') / video['name_without_ext'] / 'labels'
+                    has_autodistill_labels = labels_path.exists() and any(labels_path.glob("*.txt"))
+                    
+                    if has_autodistill_labels:
+                        # Si tiene etiquetas de AutoDistill
+                        label_count = len(list(labels_path.glob("*.txt")))
+                        action_buttons = dbc.ButtonGroup([
+                            dbc.Button([
+                                html.I(className="fas fa-eye me-2"),
+                                "Ver Etiquetado"
+                            ], id={'type': 'review-btn', 'index': idx}, 
+                             color="info", size="sm"),
+                            dbc.Button([
+                                html.I(className="fas fa-sync me-2"),
+                                "Re-convertir"
+                            ], id={'type': 'convert-btn', 'index': idx}, 
+                             color="warning", size="sm", outline=True)
+                        ], className="w-100")
+                        
+                        status_badge = dbc.Badge([
+                            html.I(className="fas fa-robot me-1"),
+                            f"{label_count} etiquetados"
+                        ], color="info", className="mb-2")
+                    else:
+                        # Si solo tiene frames sin etiquetar
+                        action_buttons = dbc.ButtonGroup([
+                            dbc.Button([
+                                html.I(className="fas fa-tag me-2"),
+                                "Revisar"
+                            ], id={'type': 'review-btn', 'index': idx}, 
+                             color="success", size="sm"),
+                            dbc.Button([
+                                html.I(className="fas fa-sync me-2"),
+                                "Re-convertir"
+                            ], id={'type': 'convert-btn', 'index': idx}, 
+                             color="warning", size="sm", outline=True)
+                        ], className="w-100")
+                        
+                        status_badge = dbc.Badge([
+                            html.I(className="fas fa-check me-1"),
+                            f"{video.get('existing_frames', '0')} frames"
+                        ], color="success", className="mb-2")
             else:
                 action_buttons = dbc.Button([
                     html.I(className="fas fa-play me-2"),
@@ -1640,6 +2194,91 @@ class AdvancedAnnotationSuite:
         
         return dbc.Row(cards)
 
+    def _count_autodistill_labeled(self, videos):
+        """Contar cuántos videos tienen etiquetas de AutoDistill"""
+        from pathlib import Path
+        
+        count = 0
+        for video in videos:
+            if video.get('is_subdataset'):
+                # Para subdatasets, verificar si tiene etiquetas
+                if video.get('has_labels', False):
+                    count += 1
+            elif video.get('has_frames', False):
+                # Para videos originales, verificar AutoDistill
+                labels_path = Path('output') / video['name_without_ext'] / 'labels'
+                if labels_path.exists() and any(labels_path.glob("*.txt")):
+                    count += 1
+        return count
+
+    def _expand_videos_with_subdatasets(self, videos):
+        """Expandir lista de videos para incluir subdatasets de AutoDistill"""
+        from pathlib import Path
+        
+        expanded_videos = []
+        
+        for video in videos:
+            # Agregar el video original
+            expanded_videos.append(video)
+            
+            # Buscar subdatasets de AutoDistill
+            video_folder = Path('output') / video['name_without_ext']
+            if video_folder.exists():
+                # Buscar subcarpetas train, valid, test
+                for subdir in ['train', 'valid', 'test']:
+                    subdir_path = video_folder / subdir
+                    if subdir_path.exists():
+                        # Verificar si tiene imágenes
+                        images_path = subdir_path / 'images'
+                        labels_path = subdir_path / 'labels'
+                        
+                        has_images = False
+                        has_labels = False
+                        image_count = 0
+                        
+                        if images_path.exists():
+                            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                            for ext in image_extensions:
+                                images = list(images_path.glob(f'*{ext}'))
+                                image_count += len(images)
+                            has_images = image_count > 0
+                        
+                        label_count = 0
+                        if labels_path.exists():
+                            labels = list(labels_path.glob('*.txt'))
+                            has_labels = len(labels) > 0
+                            label_count = len(labels)
+                        
+                        if has_images or has_labels:
+                            # Crear entrada para el subdataset
+                            subdataset = {
+                                'name': f"{video['name_without_ext']} - {subdir.title()}",
+                                'name_without_ext': f"{video['name_without_ext']}_{subdir}",
+                                'path': str(subdir_path),
+                                'images_path': str(images_path) if has_images else str(subdir_path),
+                                'labels_path': str(labels_path) if has_labels else None,
+                                'size': video.get('size', 'N/A'),
+                                'duration': f"{image_count} imágenes, {label_count} etiquetas",
+                                'has_frames': has_images,
+                                'has_labels': has_labels,
+                                'label_count': label_count,
+                                'is_subdataset': True,
+                                'parent_video': video['name_without_ext'],
+                                'dataset_type': subdir
+                            }
+                            expanded_videos.append(subdataset)
+        
+        return expanded_videos
+
+    def _has_autodistill_labels(self, video_info):
+        """Verificar si un video tiene etiquetas de AutoDistill"""
+        from pathlib import Path
+        
+        frames_path = Path('output') / video_info['name_without_ext']
+        labels_path = frames_path / 'labels'
+        
+        return labels_path.exists() and any(labels_path.glob('*.txt'))
+
     def _reload_dataset_for_folder(self, folder_path):
         """Recargar dataset para una carpeta específica"""
         try:
@@ -1661,20 +2300,230 @@ class AdvancedAnnotationSuite:
             
             # Recargar configuración de anotaciones y figure generator para la nueva ruta
             if hasattr(self, 'annotation_manager'):
-                # Actualizar la ruta en el annotation manager
-                labels_path = os.path.join(folder_path, 'labels')
+                # Determinar la ruta de etiquetas correcta
+                # Si estamos en una subcarpeta de AutoDistill (ej: train/images), 
+                # las etiquetas están en el directorio hermano 'labels'
+                if folder_path.endswith('images'):
+                    # Estructura de AutoDistill: train/images -> train/labels
+                    parent_dir = os.path.dirname(folder_path)
+                    labels_path = os.path.join(parent_dir, 'labels')
+                else:
+                    # Estructura tradicional: frames -> frames/labels
+                    labels_path = os.path.join(folder_path, 'labels')
+                
                 os.makedirs(labels_path, exist_ok=True)
                 self.annotation_manager.labels_path = labels_path
+                print(f"📁 Ruta de etiquetas configurada: {labels_path}")
             
             if hasattr(self, 'figure_generator'):
                 # Actualizar la ruta en el figure generator
                 self.figure_generator.images_path = folder_path
             
             print(f"✅ Dataset recargado: {len(self.image_files)} imágenes en {folder_path}")
-            print(f"✅ Archivos encontrados: {self.image_files[:5]}...")  # Mostrar primeros 5
+            print(f"✅ Archivos encontradas: {self.image_files[:5]}...")  # Mostrar primeros 5
             
         except Exception as e:
             print(f"Error recargando dataset: {e}")
+
+    def _run_autodistill_process(self, dataset_path, base_model, classes, confidence_threshold, iou_threshold):
+        """Ejecutar proceso real de AutoDistill"""
+        try:
+            from autodistill.detection import CaptionOntology
+            from autodistill_grounding_dino import GroundingDINO
+            from autodistill_yolov8 import YOLOv8
+            from pathlib import Path
+            import threading
+            import time
+            
+            # Crear ontología
+            ontology_dict = {class_name: class_name for class_name in classes}
+            ontology = CaptionOntology(ontology_dict)
+            
+            # Configurar modelo base
+            if base_model == "grounding-dino":
+                base_model_instance = GroundingDINO(ontology=ontology)
+            else:
+                # Por defecto usar GroundingDINO
+                base_model_instance = GroundingDINO(ontology=ontology)
+            
+            # Configurar modelo objetivo (YOLOv8)
+            target_model = YOLOv8("yolov8n.pt")
+            
+            # Preparar rutas
+            dataset_path = Path(dataset_path)
+            labels_dir = dataset_path / "labels"
+            labels_dir.mkdir(exist_ok=True)
+            
+            # Progreso inicial
+            progress_value = 20
+            status = dbc.Alert([
+                html.I(className="fas fa-robot me-2"),
+                f"Generando anotaciones con {base_model}..."
+            ], color="info")
+            
+            # Función para ejecutar en thread separado
+            def run_distillation():
+                try:
+                    print(f"🤖 Iniciando AutoDistill en {dataset_path}")
+                    print(f"📝 Clases: {classes}")
+                    
+                    # Ejecutar AutoDistill
+                    base_model_instance.label(
+                        input_folder=str(dataset_path),
+                        output_folder=str(labels_dir),
+                        extension=".jpg"
+                    )
+                    
+                    print("✅ AutoDistill completado exitosamente")
+                    
+                    # Mover archivos de etiquetas a la estructura original
+                    self._move_autodistill_labels_to_base(dataset_path, labels_dir)
+                    
+                except Exception as e:
+                    print(f"❌ Error en AutoDistill: {e}")
+            
+            # Iniciar en thread separado (para no bloquear la UI)
+            thread = threading.Thread(target=run_distillation)
+            thread.start()
+            
+            # Simular progreso mientras procesa
+            results = html.Div([
+                html.H6("🤖 AutoDistill en ejecución:"),
+                html.Ul([
+                    html.Li(f"Dataset: {dataset_path.name}"),
+                    html.Li(f"Modelo base: {base_model}"),
+                    html.Li(f"Clases: {', '.join(classes)}"),
+                    html.Li(f"Confianza mínima: {confidence_threshold}"),
+                    html.Li(f"Directorio de salida: {labels_dir}")
+                ]),
+                dbc.Alert([
+                    html.I(className="fas fa-info-circle me-2"),
+                    "El proceso puede tardar varios minutos dependiendo del número de imágenes."
+                ], color="info", className="mt-3")
+            ])
+            
+            return (progress_value, f"Procesando... {progress_value}%", 
+                   status, results, True, False, False)  # Activar interval
+            
+        except ImportError as e:
+            error_msg = f"Error importando módulos de AutoDistill: {str(e)}"
+            print(f"❌ {error_msg}")
+            return (0, "Error", 
+                   dbc.Alert(f"❌ {error_msg}", color="danger"),
+                   "", False, True, True)  # Desactivar interval
+        except Exception as e:
+            error_msg = f"Error ejecutando AutoDistill: {str(e)}"
+            print(f"❌ {error_msg}")
+            return (0, "Error", 
+                   dbc.Alert(f"❌ {error_msg}", color="danger"),
+                   "", False, True, True)  # Desactivar interval
+
+    def _move_autodistill_labels_to_base(self, dataset_path, labels_dir):
+        """Mover etiquetas de AutoDistill a la estructura original"""
+        try:
+            import os
+            import shutil
+            from pathlib import Path
+            
+            dataset_path = Path(dataset_path)
+            labels_dir = Path(labels_dir)
+            
+            print(f"🔄 Reorganizando archivos de AutoDistill...")
+            print(f"📁 Dataset base: {dataset_path}")
+            print(f"📂 Directorio de labels: {labels_dir}")
+            
+            # Buscar carpetas train/labels y valid/labels (estructura típica de AutoDistill)
+            train_labels_dir = labels_dir / "train" / "labels"
+            valid_labels_dir = labels_dir / "valid" / "labels"
+            
+            # También buscar estructura alternativa con annotations
+            train_annotations_dir = labels_dir / "train" / "annotations"
+            valid_annotations_dir = labels_dir / "valid" / "annotations"
+            annotations_dir = labels_dir / "annotations"
+            
+            # Lista de directorios donde buscar etiquetas
+            label_sources = []
+            
+            if train_labels_dir.exists():
+                label_sources.append(train_labels_dir)
+                print(f"✅ Encontradas etiquetas de entrenamiento en: {train_labels_dir}")
+                
+            if valid_labels_dir.exists():
+                label_sources.append(valid_labels_dir)
+                print(f"✅ Encontradas etiquetas de validación en: {valid_labels_dir}")
+                
+            if train_annotations_dir.exists():
+                label_sources.append(train_annotations_dir)
+                print(f"✅ Encontradas anotaciones de entrenamiento en: {train_annotations_dir}")
+                
+            if valid_annotations_dir.exists():
+                label_sources.append(valid_annotations_dir)
+                print(f"✅ Encontradas anotaciones de validación en: {valid_annotations_dir}")
+                
+            if annotations_dir.exists():
+                label_sources.append(annotations_dir)
+                print(f"✅ Encontradas anotaciones en: {annotations_dir}")
+            
+            # Si no hay directorios específicos, buscar directamente en labels
+            if not label_sources and labels_dir.exists():
+                if any(labels_dir.glob("*.txt")):
+                    label_sources.append(labels_dir)
+                    print(f"✅ Encontradas etiquetas directamente en: {labels_dir}")
+            
+            if not label_sources:
+                print("❌ No se encontraron anotaciones de AutoDistill")
+                return
+            
+            # Crear carpeta labels en el directorio base si no existe
+            base_labels_dir = dataset_path / "labels"
+            base_labels_dir.mkdir(exist_ok=True)
+            
+            # Mover archivos de etiquetas (.txt) desde todos los directorios encontrados
+            moved_count = 0
+            for source_dir in label_sources:
+                print(f"🔄 Procesando etiquetas desde: {source_dir}")
+                for label_file in source_dir.glob("*.txt"):
+                    dest_file = base_labels_dir / label_file.name
+                    try:
+                        # Solo copiar si no existe o si es diferente
+                        if not dest_file.exists():
+                            shutil.copy2(label_file, dest_file)
+                            moved_count += 1
+                            print(f"📝 Movido: {label_file.name}")
+                        else:
+                            print(f"⚠️ Ya existe: {label_file.name}")
+                    except Exception as e:
+                        print(f"❌ Error moviendo {label_file.name}: {e}")
+            
+            # Buscar y mover imágenes si están en carpetas separadas
+            train_images_dir = labels_dir / "train" / "images"
+            valid_images_dir = labels_dir / "valid" / "images"
+            
+            for images_dir in [train_images_dir, valid_images_dir]:
+                if images_dir.exists():
+                    print(f"🖼️ Encontradas imágenes en: {images_dir}")
+                    for img_file in images_dir.glob("*"):
+                        if img_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
+                            dest_file = dataset_path / img_file.name
+                            if not dest_file.exists():  # Solo mover si no existe
+                                try:
+                                    shutil.copy2(img_file, dest_file)
+                                    print(f"🖼️ Movida imagen: {img_file.name}")
+                                except Exception as e:
+                                    print(f"❌ Error moviendo imagen {img_file.name}: {e}")
+            
+            # Limpiar carpetas temporales de AutoDistill
+            try:
+                if labels_dir.exists() and labels_dir != base_labels_dir:
+                    shutil.rmtree(labels_dir)
+                    print(f"🗑️ Eliminada carpeta temporal: {labels_dir}")
+            except Exception as e:
+                print(f"⚠️ No se pudo eliminar carpeta temporal: {e}")
+            
+            print(f"✅ Reorganización completada. {moved_count} etiquetas movidas.")
+            
+        except Exception as e:
+            print(f"❌ Error reorganizando archivos: {e}")
 
 def main():
     """Función principal"""
@@ -1683,8 +2532,8 @@ def main():
         suite = AdvancedAnnotationSuite(app)
         suite.setup_layout()
         suite.setup_callbacks()
-        
-        print("🚀 Iniciando AutoDistill Suite - Herramienta de Anotación Completa...")
+
+        print("🚀 Iniciando Cbot Suite - Herramienta de Anotación Completa...")
         print(f"📁 Directorio de trabajo: {suite.dataset_path}")
         print(f"📄 Archivo de clases: {suite.classes_yaml}")
         print(f"🖼️ Imágenes encontradas: {len(suite.image_files)}")
@@ -1693,7 +2542,7 @@ def main():
         print("✅ Aplicación lista!")
         
         # Ejecutar la aplicación
-        app.run_server(
+        app.run(
             debug=True,
             host='localhost',
             port=8050,
