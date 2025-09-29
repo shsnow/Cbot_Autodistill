@@ -41,7 +41,7 @@ class AdvancedAnnotationSuite:
         os.makedirs('output', exist_ok=True)
         
         # Configurar dataset por defecto
-        self.dataset_path = "CRUCE_COLON_1_class"
+        self.dataset_path = "Test_Dataset"
         self.classes_yaml = "data.yaml"
         self.images_path = os.path.join(self.dataset_path)  # Las imágenes están directamente en el directorio
         self.labels_path = os.path.join(self.dataset_path, "labels")
