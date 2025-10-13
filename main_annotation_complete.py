@@ -97,6 +97,7 @@ class AdvancedAnnotationSuite:
             children=[
                 dbc.NavItem(dbc.NavLink("🏠 Inicio", id="nav-home", href="#", active="exact")),
                 dbc.NavItem(dbc.NavLink("🏷️ Anotación", id="nav-annotation", href="#", className="active")),
+                dbc.NavItem(dbc.NavLink("🏛️ Clases", id="nav-classes", href="#")),
                 dbc.NavItem(dbc.NavLink("🤖 AutoDistill", id="nav-autodistill", href="#")),
                 dbc.NavItem(dbc.NavLink("🧠 Entrenamiento", id="nav-training", href="#")),
                 dbc.NavItem(dbc.NavLink("📁 Archivos", id="nav-files", href="#")),
@@ -502,6 +503,7 @@ class AdvancedAnnotationSuite:
         self._setup_utility_callbacks()
         self._setup_page_callbacks()
         self._setup_files_callbacks()
+        self._setup_classes_callbacks()
         self._setup_autodistill_callbacks()
         self._setup_training_callbacks()
     
@@ -552,6 +554,131 @@ class AdvancedAnnotationSuite:
                     ], color="success", className="mb-4")
                 ], md=6),
             ])
+        ], fluid=True)
+    
+    def create_classes_page(self):
+        """Crear la página de gestión de archivos de clases"""
+        return dbc.Container([
+            # Header de la página
+            dbc.Row([
+                dbc.Col([
+                    html.Div([
+                        dbc.Button("← Volver al Inicio", id="back-home-classes", 
+                                 color="secondary", className="mb-3"),
+                        html.H2([
+                            html.I(className="fas fa-tags me-3", style={"color": "#feca57"}),
+                            "Gestión de Archivos de Clases"
+                        ], className="mb-4"),
+                        html.P("Crea, edita y gestiona archivos de clases para tus proyectos", 
+                              className="text-muted mb-4")
+                    ])
+                ])
+            ]),
+            
+            # Panel de creación de nuevo archivo de clases
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-plus-circle me-2", style={"color": "#48bb78"}),
+                                "Crear Nuevo Archivo de Clases"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Nombre del archivo:", className="fw-bold mb-2"),
+                                    dbc.Input(
+                                        id="new-classes-filename",
+                                        placeholder="Ejemplo: vehiculos_urbanos",
+                                        className="mb-3"
+                                    ),
+                                    html.Label("Descripción:", className="fw-bold mb-2"),
+                                    dbc.Textarea(
+                                        id="new-classes-description",
+                                        placeholder="Descripción del conjunto de clases...",
+                                        rows=2,
+                                        className="mb-3"
+                                    )
+                                ], md=6),
+                                dbc.Col([
+                                    html.Label("Clases (una por línea):", className="fw-bold mb-2"),
+                                    dbc.Textarea(
+                                        id="new-classes-list",
+                                        placeholder="person\ncar\nbus\ntruck\nbicycle\nmotorcycle",
+                                        rows=8,
+                                        className="mb-3"
+                                    )
+                                ], md=6)
+                            ]),
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Button([
+                                        html.I(className="fas fa-save me-2"),
+                                        "Guardar Archivo de Clases"
+                                    ], id="save-classes-file", color="success", 
+                                     className="w-100", size="lg")
+                                ])
+                            ])
+                        ])
+                    ], className="mb-4")
+                ])
+            ]),
+            
+            # Lista de archivos de clases existentes
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-list me-2", style={"color": "#00d4aa"}),
+                                "Archivos de Clases Existentes"
+                            ], className="mb-0"),
+                            dbc.Button([
+                                html.I(className="fas fa-sync-alt me-1"),
+                                "Actualizar"
+                            ], id="refresh-classes-list", color="info", 
+                             size="sm", className="ms-auto")
+                        ], className="d-flex justify-content-between align-items-center"),
+                        dbc.CardBody([
+                            html.Div(id="classes-files-list", children=[
+                                dbc.Alert([
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "Cargando archivos de clases..."
+                                ], color="info")
+                            ])
+                        ])
+                    ])
+                ])
+            ]),
+            
+            # Modal para editar archivo de clases
+            dbc.Modal([
+                dbc.ModalHeader("Editar Archivo de Clases"),
+                dbc.ModalBody([
+                    html.Label("Nombre del archivo:", className="fw-bold mb-2"),
+                    dbc.Input(id="edit-classes-filename", className="mb-3"),
+                    html.Label("Descripción:", className="fw-bold mb-2"),
+                    dbc.Textarea(id="edit-classes-description", rows=2, className="mb-3"),
+                    html.Label("Clases (una por línea):", className="fw-bold mb-2"),
+                    dbc.Textarea(id="edit-classes-list", rows=10, className="mb-3")
+                ]),
+                dbc.ModalFooter([
+                    dbc.Button("Cancelar", id="cancel-edit-classes", color="secondary"),
+                    dbc.Button("Guardar Cambios", id="save-edit-classes", color="success")
+                ])
+            ], id="edit-classes-modal", is_open=False, size="lg"),
+            
+            # Toast para notificaciones
+            dbc.Toast(
+                id="classes-toast",
+                header="Notificación",
+                is_open=False,
+                dismissable=True,
+                duration=3000,
+                style={"position": "fixed", "top": 66, "right": 10, "width": 350}
+            )
         ], fluid=True)
     
     def create_files_page(self):
@@ -746,22 +873,34 @@ class AdvancedAnnotationSuite:
                                     )
                                 ], md=6),
                                 dbc.Col([
-                                    html.Label("Clases a detectar (una por línea):", className="fw-bold mb-2"),
+                                    html.Label("Nombres de clases (una por línea):", className="fw-bold mb-2"),
                                     dbc.Textarea(
                                         id="ontology-classes",
                                         placeholder="person\ncar\ntraffic light\nstop sign\nbus\ntruck",
                                         value="person\ncar\ntraffic light\nstop sign\nbus\ntruck",
-                                        rows=8,
+                                        rows=6,
                                         className="mb-3"
                                     )
                                 ], md=6)
                             ]),
                             dbc.Row([
                                 dbc.Col([
+                                    html.Label("Descripciones de clases (una por línea, mismo orden):", className="fw-bold mb-2"),
+                                    dbc.Textarea(
+                                        id="ontology-descriptions",
+                                        placeholder="Una persona de cualquier edad\nVehículo automóvil de cuatro ruedas\nSemáforo de tráfico con luces\nSeñal de alto octagonal roja\nVehículo de transporte público\nVehículo pesado de carga",
+                                        value="Una persona de cualquier edad\nVehículo automóvil de cuatro ruedas\nSemáforo de tráfico con luces\nSeñal de alto octagonal roja\nVehículo de transporte público\nVehículo pesado de carga",
+                                        rows=4,
+                                        className="mb-3"
+                                    )
+                                ], md=12)
+                            ]),
+                            dbc.Row([
+                                dbc.Col([
                                     dbc.Alert([
                                         html.I(className="fas fa-info-circle me-2"),
                                         html.Strong("Tip: "),
-                                        "Usa nombres en inglés y simples. Evita frases complejas. Ejemplo: 'car' en lugar de 'red sports car'."
+                                        "Las descripciones ayudan al modelo a entender mejor qué detectar. Mantén el mismo orden entre clases y descripciones."
                                     ], color="info", className="mb-0")
                                 ])
                             ])
@@ -935,6 +1074,92 @@ class AdvancedAnnotationSuite:
                                      className="w-100 mb-3", disabled=True),
                                     html.Div(id="split-status", className="text-center")
                                 ], md=6)
+                            ])
+                        ])
+                    ], className="mb-4")
+                ])
+            ]),
+            
+            # Configuración de Clases para Entrenamiento
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-tags me-2", style={"color": "#e67e22"}),
+                                "Configuración de Clases"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Fuente de clases:", className="fw-bold mb-2"),
+                                    dbc.RadioItems(
+                                        id="classes-source-selector",
+                                        options=[
+                                            {"label": "🗂️ Usar archivo data.yaml del dataset", "value": "dataset"},
+                                            {"label": "📁 Seleccionar archivo de clases personalizado", "value": "custom"},
+                                            {"label": "✏️ Escribir clases manualmente", "value": "manual"}
+                                        ],
+                                        value="dataset",
+                                        className="mb-3"
+                                    )
+                                ], md=12)
+                            ]),
+                            # Selector de archivo personalizado (oculto por defecto)
+                            html.Div([
+                                dbc.Row([
+                                    dbc.Col([
+                                        html.Label("Archivo de clases personalizado:", className="fw-bold mb-2"),
+                                        dbc.Select(
+                                            id="custom-classes-file-selector",
+                                            placeholder="Selecciona un archivo de clases...",
+                                            className="mb-3"
+                                        ),
+                                        dbc.Button([
+                                            html.I(className="fas fa-sync me-2"),
+                                            "Actualizar Lista de Archivos"
+                                        ], id="refresh-classes-files-btn", color="info", outline=True, size="sm")
+                                    ], md=6),
+                                    dbc.Col([
+                                        html.Label("Información del archivo:", className="fw-bold mb-2"),
+                                        html.Div(id="selected-classes-file-info", className="mb-3")
+                                    ], md=6)
+                                ])
+                            ], id="custom-classes-section", style={"display": "none"}),
+                            # Editor manual de clases (oculto por defecto)
+                            html.Div([
+                                dbc.Row([
+                                    dbc.Col([
+                                        html.Label("Clases para entrenamiento (una por línea):", className="fw-bold mb-2"),
+                                        dbc.Textarea(
+                                            id="manual-training-classes",
+                                            placeholder="person\ncar\nbus\ntruck\nbicycle\nmotorcycle\ntraffic light\nstop sign",
+                                            rows=8,
+                                            className="mb-3"
+                                        )
+                                    ], md=6),
+                                    dbc.Col([
+                                        html.Label("Descripción:", className="fw-bold mb-2"),
+                                        dbc.Textarea(
+                                            id="manual-classes-description",
+                                            placeholder="Descripción de las clases seleccionadas para este entrenamiento...",
+                                            rows=4,
+                                            className="mb-3"
+                                        ),
+                                        dbc.Alert([
+                                            html.I(className="fas fa-info-circle me-2"),
+                                            html.Strong("Nota: "),
+                                            "Las clases deben coincidir con las del dataset o estar incluidas en las anotaciones."
+                                        ], color="info")
+                                    ], md=6)
+                                ])
+                            ], id="manual-classes-section", style={"display": "none"}),
+                            # Resumen de clases seleccionadas
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Div(id="training-classes-summary", className="mt-3")
+                                ])
                             ])
                         ])
                     ], className="mb-4")
@@ -1384,13 +1609,14 @@ class AdvancedAnnotationSuite:
              Output('current-page', 'data')],
             [Input('nav-home', 'n_clicks'),
              Input('nav-annotation', 'n_clicks'),
+             Input('nav-classes', 'n_clicks'),
              Input('nav-autodistill', 'n_clicks'),
              Input('nav-training', 'n_clicks'),
              Input('nav-files', 'n_clicks')],
             [State('current-page', 'data')],
             prevent_initial_call=False
         )
-        def navigate_pages(nav_home, nav_annotation, nav_autodistill, nav_training, nav_files, current_page):
+        def navigate_pages(nav_home, nav_annotation, nav_classes, nav_autodistill, nav_training, nav_files, current_page):
             """Manejar la navegación entre páginas"""
             ctx = callback_context
             if not ctx.triggered:
@@ -1403,6 +1629,8 @@ class AdvancedAnnotationSuite:
                 return self.create_home_page(), {'page': 'home'}
             elif button_id == 'nav-annotation':
                 return self.create_annotation_page(), {'page': 'annotation'}
+            elif button_id == 'nav-classes':
+                return self.create_classes_page(), {'page': 'classes'}
             elif button_id == 'nav-autodistill':
                 return self.create_autodistill_page(), {'page': 'autodistill'}
             elif button_id == 'nav-training':
@@ -1416,6 +1644,8 @@ class AdvancedAnnotationSuite:
                 return self.create_home_page(), current_page
             elif current_page['page'] == 'annotation':
                 return self.create_annotation_page(), current_page
+            elif current_page['page'] == 'classes':
+                return self.create_classes_page(), current_page
             elif current_page['page'] == 'autodistill':
                 return self.create_autodistill_page(), current_page
             elif current_page['page'] == 'training':
@@ -1486,6 +1716,19 @@ class AdvancedAnnotationSuite:
         )
         def go_back_home_from_training(back_clicks):
             """Volver al inicio desde la página de training"""
+            if back_clicks:
+                return self.create_home_page(), {'page': 'home'}
+            return no_update, no_update
+        
+        # Callback para volver al inicio desde clases
+        @self.app.callback(
+            [Output('page-content', 'children', allow_duplicate=True),
+             Output('current-page', 'data', allow_duplicate=True)],
+            [Input('back-home-classes', 'n_clicks')],
+            prevent_initial_call=True
+        )
+        def go_back_home_from_classes(back_clicks):
+            """Volver al inicio desde la página de clases"""
             if back_clicks:
                 return self.create_home_page(), {'page': 'home'}
             return no_update, no_update
@@ -2324,6 +2567,131 @@ class AdvancedAnnotationSuite:
             
             return no_update, no_update, no_update, no_update, no_update, no_update, no_update
 
+    def _setup_classes_callbacks(self):
+        """Configurar callbacks para la gestión de clases"""
+        import os
+        import json
+        from pathlib import Path
+        
+        # Crear directorio para archivos de clases si no existe
+        classes_dir = Path('classes')
+        classes_dir.mkdir(exist_ok=True)
+        
+        # Callback para guardar nuevo archivo de clases
+        @self.app.callback(
+            [Output('classes-toast', 'is_open'),
+             Output('classes-toast', 'children'),
+             Output('new-classes-filename', 'value'),
+             Output('new-classes-description', 'value'),
+             Output('new-classes-list', 'value')],
+            [Input('save-classes-file', 'n_clicks')],
+            [State('new-classes-filename', 'value'),
+             State('new-classes-description', 'value'),
+             State('new-classes-list', 'value')],
+            prevent_initial_call=True
+        )
+        def save_classes_file(save_clicks, filename, description, classes_text):
+            """Guardar nuevo archivo de clases"""
+            if not save_clicks or not filename or not classes_text:
+                return False, "", no_update, no_update, no_update
+            
+            try:
+                # Procesar clases
+                classes = [cls.strip() for cls in classes_text.split('\n') if cls.strip()]
+                
+                if not classes:
+                    return True, dbc.Alert("❌ Debe especificar al menos una clase", color="danger"), no_update, no_update, no_update
+                
+                # Crear estructura del archivo
+                classes_data = {
+                    "name": filename,
+                    "description": description or "",
+                    "classes": classes,
+                    "created_at": str(datetime.now()),
+                    "count": len(classes)
+                }
+                
+                # Guardar archivo
+                filepath = classes_dir / f"{filename}.json"
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(classes_data, f, ensure_ascii=False, indent=2)
+                
+                return True, dbc.Alert(f"✅ Archivo '{filename}.json' guardado exitosamente", color="success"), "", "", ""
+                
+            except Exception as e:
+                return True, dbc.Alert(f"❌ Error guardando archivo: {str(e)}", color="danger"), no_update, no_update, no_update
+        
+        # Callback para cargar lista de archivos de clases
+        @self.app.callback(
+            Output('classes-files-list', 'children'),
+            [Input('current-page', 'data'),
+             Input('refresh-classes-list', 'n_clicks'),
+             Input('save-classes-file', 'n_clicks')],
+            prevent_initial_call=False
+        )
+        def load_classes_files_list(current_page, refresh_clicks, save_clicks):
+            """Cargar y mostrar lista de archivos de clases"""
+            if current_page and current_page.get('page') != 'classes':
+                return no_update
+            
+            try:
+                classes_files = list(classes_dir.glob("*.json"))
+                
+                if not classes_files:
+                    return [dbc.Alert([
+                        html.I(className="fas fa-info-circle me-2"),
+                        "No hay archivos de clases creados aún. Crea tu primer archivo usando el panel de arriba."
+                    ], color="info")]
+                
+                cards = []
+                for file_path in sorted(classes_files):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        cards.append(
+                            dbc.Card([
+                                dbc.CardBody([
+                                    html.H6(data.get('name', file_path.stem), className="card-title"),
+                                    html.P(data.get('description', 'Sin descripción'), className="card-text text-muted small"),
+                                    html.Div([
+                                        html.Small([
+                                            html.I(className="fas fa-tags me-1"),
+                                            f"{data.get('count', len(data.get('classes', [])))} clases"
+                                        ], className="text-muted me-3"),
+                                        html.Small([
+                                            html.I(className="fas fa-calendar me-1"),
+                                            data.get('created_at', 'Fecha desconocida')[:10]
+                                        ], className="text-muted")
+                                    ], className="mb-3"),
+                                    html.Div([
+                                        ", ".join(data.get('classes', [])[:5]) + 
+                                        ("..." if len(data.get('classes', [])) > 5 else "")
+                                    ], className="small text-info mb-3"),
+                                    dbc.ButtonGroup([
+                                        dbc.Button([
+                                            html.I(className="fas fa-edit me-1"),
+                                            "Editar"
+                                        ], id={'type': 'edit-classes-btn', 'index': file_path.stem}, 
+                                         color="warning", size="sm"),
+                                        dbc.Button([
+                                            html.I(className="fas fa-trash me-1"),
+                                            "Eliminar"
+                                        ], id={'type': 'delete-classes-btn', 'index': file_path.stem}, 
+                                         color="danger", size="sm", outline=True)
+                                    ], className="w-100")
+                                ])
+                            ], className="mb-3")
+                        )
+                    except Exception as e:
+                        print(f"Error cargando {file_path}: {e}")
+                        continue
+                
+                return cards
+                
+            except Exception as e:
+                return [dbc.Alert(f"❌ Error cargando archivos: {str(e)}", color="danger")]
+
     def _setup_training_callbacks(self):
         """Configurar callbacks para Entrenamiento"""
         from pathlib import Path
@@ -3115,6 +3483,38 @@ class AdvancedAnnotationSuite:
             toast_message = dbc.Alert(f"❌ {error_msg}", color="danger")
             return True, toast_message, False, True, 0, "Error", "", ""
 
+        # Callback para manejar selección de fuente de clases en entrenamiento
+        @self.app.callback(
+            [Output('custom-classes-section', 'style'),
+             Output('manual-classes-section', 'style'),
+             Output('training-classes-summary', 'children')],
+            [Input('classes-source-selector', 'value')],
+            prevent_initial_call=True
+        )
+        def toggle_classes_source(source):
+            """Mostrar/ocultar secciones según la fuente de clases seleccionada"""
+            if source == "custom":
+                return {"display": "block"}, {"display": "none"}, html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-info-circle me-2"),
+                        "Selecciona un archivo de clases personalizado de la lista."
+                    ], color="info")
+                ])
+            elif source == "manual":
+                return {"display": "none"}, {"display": "block"}, html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-edit me-2"),
+                        "Escribe las clases manualmente en el campo de texto."
+                    ], color="info")
+                ])
+            else:  # dataset
+                return {"display": "none"}, {"display": "none"}, html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-file-code me-2"),
+                        "Se usarán las clases del archivo data.yaml del dataset seleccionado."
+                    ], color="success")
+                ])
+
     def _create_videos_grid(self, videos, processing_status=None):
         """Crear grid de tarjetas de video"""
         from pathlib import Path
@@ -3257,6 +3657,24 @@ class AdvancedAnnotationSuite:
                                 html.I(className="fas fa-film me-1"),
                                 f"{video.get('frame_count', 0)} frames"
                             ], className="text-muted d-block")
+                        ], className="mb-2"),
+                        
+                        # Selector de archivo de clases
+                        html.Div([
+                            html.Label([
+                                html.I(className="fas fa-tags me-1"),
+                                "Archivo de clases:"
+                            ], className="small fw-bold text-muted"),
+                            dbc.Select(
+                                id={'type': 'classes-selector', 'index': idx},
+                                options=[
+                                    {"label": "Usar data.yaml por defecto", "value": "default"},
+                                    {"label": "Cargar archivos de clases...", "value": "loading"}
+                                ],
+                                value="default",
+                                size="sm",
+                                className="mb-2"
+                            )
                         ], className="mb-3"),
                         
                         # Botones de acción
@@ -3601,6 +4019,77 @@ class AdvancedAnnotationSuite:
             
         except Exception as e:
             print(f"❌ Error reorganizando archivos: {e}")
+
+    # Funciones auxiliares para gestión de archivos de clases
+    def _load_classes_files(self):
+        """Cargar lista de archivos de clases disponibles"""
+        classes_folder = "classes_files"
+        if not os.path.exists(classes_folder):
+            os.makedirs(classes_folder)
+            return []
+        
+        classes_files = []
+        for filename in os.listdir(classes_folder):
+            if filename.endswith('.json'):
+                try:
+                    filepath = os.path.join(classes_folder, filename)
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        classes_files.append({
+                            'filename': filename,
+                            'name': data.get('name', filename.replace('.json', '')),
+                            'description': data.get('description', ''),
+                            'classes': data.get('classes', []),
+                            'created': data.get('created', 'Fecha desconocida')
+                        })
+                except Exception as e:
+                    print(f"Error cargando archivo de clases {filename}: {e}")
+        
+        return sorted(classes_files, key=lambda x: x['name'])
+    
+    def _save_classes_file(self, name, description, classes_list):
+        """Guardar un nuevo archivo de clases"""
+        try:
+            classes_folder = "classes_files"
+            if not os.path.exists(classes_folder):
+                os.makedirs(classes_folder)
+            
+            # Limpiar el nombre para el archivo
+            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', name)
+            filename = f"{safe_name}.json"
+            filepath = os.path.join(classes_folder, filename)
+            
+            # Crear el contenido del archivo
+            data = {
+                'name': name,
+                'description': description,
+                'classes': [cls.strip() for cls in classes_list if cls.strip()],
+                'created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'version': '1.0'
+            }
+            
+            # Guardar el archivo
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            return True, f"Archivo de clases '{name}' guardado correctamente"
+        
+        except Exception as e:
+            return False, f"Error guardando archivo: {str(e)}"
+    
+    def _get_classes_file_options(self):
+        """Obtener opciones para selectores de archivos de clases"""
+        classes_files = self._load_classes_files()
+        
+        options = [{"label": "Usar data.yaml por defecto", "value": "default"}]
+        
+        for file_data in classes_files:
+            options.append({
+                "label": f"📁 {file_data['name']} ({len(file_data['classes'])} clases)",
+                "value": file_data['filename']
+            })
+        
+        return options
 
 def main():
     """Función principal"""
