@@ -1,0 +1,11 @@
+{
+  "name": "animals",
+  "description": "",
+  "classes": [
+    "perro",
+    "gato",
+    "raton"
+  ],
+  "created_at": "2025-10-15 18:17:00.562416",
+  "count": 3
+}

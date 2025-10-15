@@ -2461,44 +2461,42 @@ class AdvancedAnnotationSuite:
             if triggered_id == 'autodistill-stop-btn':
                 return (0, "Detenido", 
                        dbc.Alert("❌ Proceso detenido por el usuario", color="warning"),
-                       "", False, True, True)  # Desactivar interval
-            
+                       "", False, True, True)  # Botón inicio habilitado, stop deshabilitado
             # Botón start presionado
             if triggered_id == 'autodistill-start-btn' and start_clicks:
                 # Validar entradas
                 if not dataset_path:
                     return (0, "Error", 
                            dbc.Alert("❌ Por favor selecciona un dataset", color="danger"),
-                           "", False, True, True)  # Desactivar interval
-                
+                           "", True, False, True)  # Botón inicio deshabilitado, stop habilitado
                 if not ontology_text.strip():
                     return (0, "Error", 
                            dbc.Alert("❌ Por favor define las clases en la ontología", color="danger"),
-                           "", False, True, True)  # Desactivar interval
-                
+                           "", True, False, True)  # Botón inicio deshabilitado, stop habilitado
                 try:
                     # Parsear ontología (formato simple: una clase por línea)
                     classes = [line.strip() for line in ontology_text.strip().split('\n') 
                               if line.strip()]
-                    
                     if not classes:
                         return (0, "Error", 
                                dbc.Alert("❌ No se encontraron clases válidas en la ontología", color="danger"),
-                               "", False, True, True)  # Desactivar interval
-                    
+                               "", True, False, True)  # Botón inicio deshabilitado, stop habilitado
                     # Ejecutar AutoDistill real
                     iou_threshold = 0.5  # Valor por defecto
-                    return self._run_autodistill_process(
+                    result = self._run_autodistill_process(
                         dataset_path, base_model, classes, 
                         confidence_threshold, iou_threshold
                     )
-                    
+                    # Forzar deshabilitado del botón de inicio
+                    if isinstance(result, tuple) and len(result) == 7:
+                        # autodistill-start-btn disabled, autodistill-stop-btn enabled
+                        return (*result[:-3], True, False, *result[-1:])
+                    return result
                 except Exception as e:
                     error_msg = f"Error procesando: {str(e)}"
                     return (0, "Error", 
                            dbc.Alert(f"❌ {error_msg}", color="danger"),
-                           "", False, True, True)  # Desactivar interval
-            
+                           "", True, False, True)  # Botón inicio deshabilitado, stop habilitado
             return no_update, no_update, no_update, no_update, no_update, no_update, no_update
         
         # Callback para actualizar información del dataset seleccionado
@@ -3400,6 +3398,7 @@ class AdvancedAnnotationSuite:
             [Input('training-start-btn', 'n_clicks'),
              Input('training-stop-btn', 'n_clicks')],
             [State('training-dataset-selector', 'value'),
+             State('classes-source-selector', 'value'),
              State('training-epochs', 'value'),
              State('training-batch-size', 'value'),
              State('training-lr', 'value'),
@@ -3408,7 +3407,7 @@ class AdvancedAnnotationSuite:
              State('current-page', 'data')],
             prevent_initial_call=True
         )
-        def start_training(start_clicks, stop_clicks, dataset_path, epochs, batch_size, 
+        def start_training(start_clicks, stop_clicks, dataset_path, classes_source, epochs, batch_size, 
                           learning_rate, image_size, patience, current_page):
             """Iniciar o detener el entrenamiento del modelo"""
             if not current_page or current_page.get('page') != 'training':
@@ -3423,45 +3422,48 @@ class AdvancedAnnotationSuite:
             # Botón stop presionado
             if triggered_id == 'training-stop-btn':
                 toast_message = dbc.Alert("⏹️ Entrenamiento detenido por el usuario", color="warning")
-                return True, toast_message, False, True, 0, "Detenido", "", ""
-            
+                return False, toast_message, False, True, 0, "Detenido", "", ""  # Botón inicio habilitado, stop deshabilitado
             # Botón start presionado
             if triggered_id == 'training-start-btn' and start_clicks:
                 if not dataset_path:
                     toast_message = dbc.Alert("❌ Por favor selecciona un dataset", color="danger")
                     return True, toast_message, False, True, 0, "Error", "", ""
-                
                 try:
+                    # Cargar clases personalizadas si se especificó un archivo
+                    if classes_source and classes_source != "default":
+                        print(f"🏷️ Cargando clases personalizadas desde: {classes_source}")
+                        self._load_custom_classes(classes_source)
+                    else:
+                        print(f"🏷️ Usando clases por defecto del data.yaml")
                     from pathlib import Path
                     dataset_path = Path(dataset_path)
-                    
                     # Verificar que existan las carpetas train y valid
                     train_dir = dataset_path / 'train'
                     val_dir = dataset_path / 'valid'
-                    
                     if not train_dir.exists() or not val_dir.exists():
                         toast_message = dbc.Alert("❌ El dataset no está dividido. Usa 'Dividir Dataset' primero.", color="danger")
                         return True, toast_message, False, True, 0, "Error", "", ""
-                    
                     # Verificar que haya imágenes y etiquetas
                     train_images = list(train_dir.glob('images/*.jpg')) + list(train_dir.glob('images/*.png'))
                     train_labels = list(train_dir.glob('labels/*.txt'))
-                    
                     if not train_images or not train_labels:
                         toast_message = dbc.Alert("❌ No se encontraron imágenes o etiquetas en train/", color="danger")
                         return True, toast_message, False, True, 0, "Error", "", ""
-                    
                     # Iniciar entrenamiento real con YOLOv8
-                    return self._start_real_training(
+                    # Deshabilitar botón de inicio mientras entrena
+                    result = self._start_real_training(
                         dataset_path, epochs, batch_size, learning_rate, 
                         image_size, patience, len(train_images), len(train_labels)
                     )
-                    
+                    # Forzar deshabilitado del botón de inicio
+                    if isinstance(result, tuple) and len(result) == 8:
+                        # training-start-btn disabled, training-stop-btn enabled
+                        return (*result[:-2], True, False)
+                    return result
                 except Exception as e:
                     error_msg = f"Error iniciando entrenamiento: {str(e)}"
                     toast_message = dbc.Alert(f"❌ {error_msg}", color="danger")
                     return True, toast_message, False, True, 0, "Error", "", ""
-            
             return no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update
 
         # Callback para simular progreso de entrenamiento
@@ -3713,20 +3715,27 @@ class AdvancedAnnotationSuite:
             train_images_path = os.path.abspath(str(dataset_path / 'train' / 'images'))
             valid_images_path = os.path.abspath(str(dataset_path / 'valid' / 'images'))
             
+            # Convertir clases de diccionario a lista para YOLO
+            classes_list = list(self.classes.values())
+            
             data_config = {
                 'train': train_images_path,
                 'val': valid_images_path, 
-                'nc': len(self.classes),  # número de clases
-                'names': self.classes
+                'nc': len(classes_list),  # número de clases
+                'names': classes_list    # lista de nombres de clases
             }
             
             # Verificar que las carpetas existan
             if not os.path.exists(train_images_path):
-                print(f"❌ Error: No existe la carpeta de entrenamiento: {train_images_path}")
-                return
+                error_msg = f"No existe la carpeta de entrenamiento: {train_images_path}"
+                print(f"❌ Error: {error_msg}")
+                toast_message = dbc.Alert(f"❌ {error_msg}", color="danger")
+                return True, toast_message, False, True, 0, "Error", "", ""
             if not os.path.exists(valid_images_path):
-                print(f"❌ Error: No existe la carpeta de validación: {valid_images_path}")
-                return
+                error_msg = f"No existe la carpeta de validación: {valid_images_path}"
+                print(f"❌ Error: {error_msg}")
+                toast_message = dbc.Alert(f"❌ {error_msg}", color="danger")
+                return True, toast_message, False, True, 0, "Error", "", ""
             
             # Guardar configuración
             with open(data_yaml_path, 'w') as f:
@@ -3736,7 +3745,7 @@ class AdvancedAnnotationSuite:
             print(f"📁 Dataset: {dataset_path}")
             print(f"🖼️ Imágenes de entrenamiento: {train_images_path}")
             print(f"🖼️ Imágenes de validación: {valid_images_path}")
-            print(f"🏷️ Clases: {self.classes}")
+            print(f"🏷️ Clases: {classes_list}")
             print(f"📊 Configuración:")
             print(f"   - Épocas: {epochs}")
             print(f"   - Batch size: {batch_size}")
@@ -3750,19 +3759,23 @@ class AdvancedAnnotationSuite:
             max_class_idx = self._validate_and_clean_labels(dataset_path)
             
             if max_class_idx >= 0:  # Solo validar si encontramos etiquetas
-                if max_class_idx >= len(self.classes):
-                    print(f"❌ Error: Se encontraron clases con índice {max_class_idx} pero solo hay {len(self.classes)} clases definidas")
-                    print(f"   Clases válidas: {list(range(len(self.classes)))}")
-                    print(f"   Nombres de clases: {self.classes}")
-                    return
+                if max_class_idx >= len(classes_list):
+                    error_msg = f"Se encontraron clases con índice {max_class_idx} pero solo hay {len(classes_list)} clases definidas"
+                    print(f"❌ Error: {error_msg}")
+                    print(f"   Clases válidas: {list(range(len(classes_list)))}")
+                    print(f"   Nombres de clases: {classes_list}")
+                    toast_message = dbc.Alert(f"❌ {error_msg}", color="danger")
+                    return True, toast_message, False, True, 0, "Error", "", ""
                 else:
                     print(f"✅ Etiquetas validadas correctamente")
                     print(f"   - Índice máximo de clase encontrado: {max_class_idx}")
-                    print(f"   - Número de clases definidas: {len(self.classes)}")
-                    print(f"   - Clases: {self.classes}")
+                    print(f"   - Número de clases definidas: {len(classes_list)}")
+                    print(f"   - Clases: {classes_list}")
             else:
-                print("⚠️ No se encontraron etiquetas válidas en el dataset")
-                return
+                error_msg = "No se encontraron etiquetas válidas en el dataset"
+                print(f"⚠️ {error_msg}")
+                toast_message = dbc.Alert(f"⚠️ {error_msg}", color="warning")
+                return True, toast_message, False, True, 0, "Error", "", ""
             
             # Inicializar progreso compartido
             if not hasattr(self, 'training_progress'):
@@ -4549,10 +4562,10 @@ def main():
         
         # Ejecutar la aplicación
         app.run(
-            debug=True,
+            debug=False,  # Deshabilitar debug para evitar reinicios automáticos
             host='localhost',
             port=8050,
-            dev_tools_hot_reload=True
+            dev_tools_hot_reload=False
         )
         
     except Exception as e:
