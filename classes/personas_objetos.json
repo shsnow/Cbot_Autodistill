@@ -1,0 +1,14 @@
+{
+  "name": "personas_objetos",
+  "description": "Clases para detección de personas y objetos comunes",
+  "classes": [
+    "person",
+    "backpack",
+    "handbag",
+    "suitcase",
+    "chair",
+    "laptop"
+  ],
+  "created_at": "2025-01-14 17:31:00",
+  "count": 6
+}

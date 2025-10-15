@@ -64,8 +64,16 @@ class AdvancedAnnotationSuite:
         """Inicializar todos los módulos necesarios"""
         # Cargar configuración
         self.config_loader = ConfigLoader(self.classes_yaml)
-        self.classes = self.config_loader.get_classes()
-        self.class_colors = self.config_loader.get_colors(len(self.classes))
+        classes_list = self.config_loader.get_classes()
+        
+        # Convertir la lista de clases a diccionario para consistencia
+        self.classes = {i: class_name for i, class_name in enumerate(classes_list)}
+        
+        # Actualizar el config_loader con el diccionario para consistencia
+        self.config_loader.classes = self.classes
+        self.config_loader.classes_list = classes_list
+        
+        self.class_colors = self.config_loader.get_colors(len(classes_list))
         
         # Inicializar managers
         self.annotation_manager = AnnotationManager(self.labels_path, self.classes)
@@ -78,6 +86,40 @@ class AdvancedAnnotationSuite:
         
         # Converter utility
         self.converter = CoordinateConverter()
+    
+    def _get_classes_options(self):
+        """Cargar opciones de archivos de clases disponibles"""
+        from pathlib import Path
+        import json
+        
+        try:
+            classes_dir = Path('classes')
+            if not classes_dir.exists():
+                return [{"label": "Usar data.yaml por defecto", "value": "default"}]
+            
+            # Opciones base
+            options = [{"label": "Usar data.yaml por defecto", "value": "default"}]
+            
+            # Cargar archivos de clases
+            classes_files = list(classes_dir.glob("*.json"))
+            for file_path in sorted(classes_files):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    options.append({
+                        "label": f"📁 {data.get('name', file_path.stem)} ({len(data.get('classes', []))} clases)",
+                        "value": file_path.name
+                    })
+                except Exception as e:
+                    print(f"Error cargando {file_path}: {e}")
+                    continue
+            
+            return options
+            
+        except Exception as e:
+            print(f"Error cargando opciones de clases: {e}")
+            return [{"label": "Usar data.yaml por defecto", "value": "default"}]
     
     def _load_image_files(self):
         """Cargar lista de archivos de imagen"""
@@ -382,7 +424,7 @@ class AdvancedAnnotationSuite:
                     ], className="mb-2 fw-semibold text-light", style={"font-size": "0.9rem"}),
                     dbc.Select(
                         id="class-selector",
-                        options=[{"label": cls, "value": i} for i, cls in enumerate(self.classes)],
+                        options=[{"label": cls_name, "value": cls_id} for cls_id, cls_name in self.classes.items()],
                         value=0, size="sm", className="mb-4"
                     )
                 ]),
@@ -400,7 +442,7 @@ class AdvancedAnnotationSuite:
                         dbc.Col([
                             dbc.Select(
                                 id="selected-class-selector",
-                                options=[{"label": cls, "value": i} for i, cls in enumerate(self.classes)],
+                                options=[{"label": cls_name, "value": cls_id} for cls_id, cls_name in self.classes.items()],
                                 value=0, size="sm", disabled=True
                             )
                         ], width=8),
@@ -527,7 +569,7 @@ class AdvancedAnnotationSuite:
                             html.P("Crea y edita bounding boxes en tus imágenes con una interfaz similar a CVAT"),
                             html.P(f"📁 Dataset activo: {self.dataset_path}"),
                             html.P(f"🖼️ Imágenes disponibles: {len(self.image_files)}"),
-                            html.P(f"🏷️ Clases: {', '.join(self.classes)}"),
+                            html.P(f"🏷️ Clases: {', '.join(self.classes.values())}"),
                             dbc.Button("Abrir Herramienta de Anotación", id="btn-annotation", 
                                      color="primary", size="lg", className="w-100")
                         ])
@@ -1093,72 +1135,39 @@ class AdvancedAnnotationSuite:
                         dbc.CardBody([
                             dbc.Row([
                                 dbc.Col([
-                                    html.Label("Fuente de clases:", className="fw-bold mb-2"),
-                                    dbc.RadioItems(
+                                    html.Label("Archivo de clases para entrenamiento:", className="fw-bold mb-2"),
+                                    dbc.Select(
                                         id="classes-source-selector",
-                                        options=[
-                                            {"label": "🗂️ Usar archivo data.yaml del dataset", "value": "dataset"},
-                                            {"label": "📁 Seleccionar archivo de clases personalizado", "value": "custom"},
-                                            {"label": "✏️ Escribir clases manualmente", "value": "manual"}
-                                        ],
-                                        value="dataset",
+                                        options=self._get_classes_options(),
+                                        value="default",
                                         className="mb-3"
-                                    )
-                                ], md=12)
-                            ]),
-                            # Selector de archivo personalizado (oculto por defecto)
-                            html.Div([
-                                dbc.Row([
-                                    dbc.Col([
-                                        html.Label("Archivo de clases personalizado:", className="fw-bold mb-2"),
-                                        dbc.Select(
-                                            id="custom-classes-file-selector",
-                                            placeholder="Selecciona un archivo de clases...",
-                                            className="mb-3"
-                                        ),
-                                        dbc.Button([
-                                            html.I(className="fas fa-sync me-2"),
-                                            "Actualizar Lista de Archivos"
-                                        ], id="refresh-classes-files-btn", color="info", outline=True, size="sm")
-                                    ], md=6),
-                                    dbc.Col([
-                                        html.Label("Información del archivo:", className="fw-bold mb-2"),
-                                        html.Div(id="selected-classes-file-info", className="mb-3")
-                                    ], md=6)
-                                ])
-                            ], id="custom-classes-section", style={"display": "none"}),
-                            # Editor manual de clases (oculto por defecto)
-                            html.Div([
-                                dbc.Row([
-                                    dbc.Col([
-                                        html.Label("Clases para entrenamiento (una por línea):", className="fw-bold mb-2"),
-                                        dbc.Textarea(
-                                            id="manual-training-classes",
-                                            placeholder="person\ncar\nbus\ntruck\nbicycle\nmotorcycle\ntraffic light\nstop sign",
-                                            rows=8,
-                                            className="mb-3"
-                                        )
-                                    ], md=6),
-                                    dbc.Col([
-                                        html.Label("Descripción:", className="fw-bold mb-2"),
-                                        dbc.Textarea(
-                                            id="manual-classes-description",
-                                            placeholder="Descripción de las clases seleccionadas para este entrenamiento...",
-                                            rows=4,
-                                            className="mb-3"
-                                        ),
+                                    ),
+                                    dbc.Button([
+                                        html.I(className="fas fa-sync me-2"),
+                                        "Actualizar Lista"
+                                    ], id="refresh-training-classes-btn", color="info", outline=True, size="sm")
+                                ], md=6),
+                                dbc.Col([
+                                    html.Label("Información del archivo seleccionado:", className="fw-bold mb-2"),
+                                    html.Div(id="training-classes-file-info", children=[
                                         dbc.Alert([
-                                            html.I(className="fas fa-info-circle me-2"),
-                                            html.Strong("Nota: "),
-                                            "Las clases deben coincidir con las del dataset o estar incluidas en las anotaciones."
+                                            html.I(className="fas fa-file-alt me-2"),
+                                            "Usando archivo data.yaml por defecto"
                                         ], color="info")
-                                    ], md=6)
-                                ])
-                            ], id="manual-classes-section", style={"display": "none"}),
+                                    ], className="mb-3")
+                                ], md=6)
+                            ]),
+                            
                             # Resumen de clases seleccionadas
                             dbc.Row([
                                 dbc.Col([
-                                    html.Div(id="training-classes-summary", className="mt-3")
+                                    html.Label("Resumen de clases para entrenamiento:", className="fw-bold mb-2"),
+                                    html.Div(id="training-classes-summary", children=[
+                                        dbc.Alert([
+                                            html.I(className="fas fa-tags me-2"),
+                                            "Las clases se cargarán según el archivo seleccionado"
+                                        ], color="secondary")
+                                    ], className="mt-3")
                                 ])
                             ])
                         ])
@@ -2235,10 +2244,12 @@ class AdvancedAnnotationSuite:
              Output('current-page', 'data', allow_duplicate=True)],
             [Input({'type': 'review-btn', 'index': ALL}, 'n_clicks')],
             [State('videos-data', 'data'),
-             State('current-page', 'data')],
+             State('current-page', 'data'),
+             State({'type': 'classes-selector', 'index': ALL}, 'value'),
+             State({'type': 'classes-selector', 'index': ALL}, 'id')],
             prevent_initial_call=True
         )
-        def open_annotation_tool_for_video(review_clicks, videos_data, current_page):
+        def open_annotation_tool_for_video(review_clicks, videos_data, current_page, classes_values, classes_ids):
             """Abrir herramienta de etiquetado para video específico"""
             # Solo ejecutar si estamos en la página de archivos
             if current_page and current_page.get('page') != 'files':
@@ -2261,6 +2272,14 @@ class AdvancedAnnotationSuite:
                 button_id = json.loads(ctx.triggered[0]['prop_id'].split('.')[0])
                 video_idx = button_id['index']
                 
+                # Buscar las clases seleccionadas para este video específico
+                selected_classes_file = None
+                if classes_values and classes_ids:
+                    for value, cls_id in zip(classes_values, classes_ids):
+                        if cls_id['index'] == video_idx and value and value != "default":
+                            selected_classes_file = value
+                            break
+                
                 if 0 <= video_idx < len(videos_data):
                     video_info = videos_data[video_idx]
                     
@@ -2282,8 +2301,13 @@ class AdvancedAnnotationSuite:
                     # Cambiar el dataset path para la herramienta de anotación
                     self.dataset_path = frames_folder
                     
-                    # Recargar imágenes y configuración para el nuevo dataset
+                    # Primero recargar imágenes y configuración para el nuevo dataset
                     self._reload_dataset_for_folder(frames_folder)
+                    
+                    # DESPUÉS cargar clases personalizadas si se especifica un archivo
+                    # Esto es importante porque así las clases personalizadas sobrescriben las por defecto
+                    if selected_classes_file:
+                        self._load_custom_classes(selected_classes_file)
                     
                     # Verificar que hay imágenes
                     if not self.image_files:
@@ -2292,13 +2316,68 @@ class AdvancedAnnotationSuite:
                     
                     print(f"✅ Dataset cargado exitosamente: {len(self.image_files)} imágenes")
                     
-                    return self.create_annotation_page(), {'page': 'annotation'}
+                    # Si se cargaron clases personalizadas, regenerar la página de anotación para reflejar los cambios
+                    annotation_page = self.create_annotation_page()
+                    
+                    return annotation_page, {'page': 'annotation'}
                         
             except Exception as e:
                 print(f"Error abriendo herramienta para video: {e}")
                 return no_update, no_update
             
             return no_update, no_update
+
+        # Callback para manejar selección de archivos de clases en videos
+        @self.app.callback(
+            [Output('files-toast', 'is_open', allow_duplicate=True),
+             Output('files-toast', 'children', allow_duplicate=True)],
+            [Input({'type': 'classes-selector', 'index': ALL}, 'value')],
+            [State({'type': 'classes-selector', 'index': ALL}, 'id')],
+            prevent_initial_call=True
+        )
+        def handle_video_classes_selection(values, ids):
+            """Manejar selección de archivos de clases para videos"""
+            from pathlib import Path
+            import json
+            import re
+            
+            ctx = callback_context
+            if not ctx.triggered:
+                return no_update, no_update
+            
+            try:
+                # Encontrar qué selector cambió
+                triggered_prop = ctx.triggered[0]['prop_id']
+                if 'classes-selector' in triggered_prop:
+                    # Extraer el valor e índice del selector que cambió
+                    match = re.search(r'"index":(\d+)', triggered_prop)
+                    if match:
+                        video_index = match.group(1)
+                        
+                        # Obtener el valor seleccionado
+                        for i, (value, selector_id) in enumerate(zip(values, ids)):
+                            if str(selector_id['index']) == video_index and value and value != "default":
+                                # Cargar información del archivo de clases
+                                classes_dir = Path('classes')
+                                file_path = classes_dir / value
+                                
+                                if file_path.exists():
+                                    with open(file_path, 'r', encoding='utf-8') as f:
+                                        data = json.load(f)
+                                    
+                                    message = dbc.Alert([
+                                        html.Strong(f"✅ Archivo de clases asignado al video: "),
+                                        html.Br(),
+                                        html.Span(f"📁 {data.get('name', 'Sin nombre')} ({len(data.get('classes', []))} clases)")
+                                    ], color="success")
+                                    
+                                    return True, message
+                
+                return no_update, no_update
+                
+            except Exception as e:
+                error_message = dbc.Alert(f"❌ Error: {str(e)}", color="danger")
+                return True, error_message
 
     def _setup_autodistill_callbacks(self):
         """Configurar callbacks para AutoDistill"""
@@ -2587,11 +2666,16 @@ class AdvancedAnnotationSuite:
             [Input('save-classes-file', 'n_clicks')],
             [State('new-classes-filename', 'value'),
              State('new-classes-description', 'value'),
-             State('new-classes-list', 'value')],
+             State('new-classes-list', 'value'),
+             State('current-page', 'data')],
             prevent_initial_call=True
         )
-        def save_classes_file(save_clicks, filename, description, classes_text):
+        def save_classes_file(save_clicks, filename, description, classes_text, current_page):
             """Guardar nuevo archivo de clases"""
+            # Verificar que estamos en la página correcta
+            if not current_page or current_page.get('page') != 'classes':
+                return no_update, no_update, no_update, no_update, no_update
+                
             if not save_clicks or not filename or not classes_text:
                 return False, "", no_update, no_update, no_update
             
@@ -2621,15 +2705,86 @@ class AdvancedAnnotationSuite:
             except Exception as e:
                 return True, dbc.Alert(f"❌ Error guardando archivo: {str(e)}", color="danger"), no_update, no_update, no_update
         
+        # Callback para actualizar lista después de guardar
+        @self.app.callback(
+            Output('classes-files-list', 'children', allow_duplicate=True),
+            [Input('refresh-classes-list', 'n_clicks')],
+            [State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def refresh_classes_list_after_save(refresh_clicks, current_page):
+            """Actualizar lista cuando se hace refresh"""
+            if not current_page or current_page.get('page') != 'classes':
+                return no_update
+                
+            try:
+                classes_files = list(classes_dir.glob("*.json"))
+                
+                if not classes_files:
+                    return [dbc.Alert([
+                        html.I(className="fas fa-info-circle me-2"),
+                        "No hay archivos de clases creados aún. Crea tu primer archivo usando el panel de arriba."
+                    ], color="info", className="mb-3")]
+                
+                file_cards = []
+                for file_path in sorted(classes_files):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        card = dbc.Card([
+                            dbc.CardBody([
+                                html.H5([
+                                    html.I(className="fas fa-file-alt me-2"),
+                                    data.get('name', file_path.stem)
+                                ], className="card-title"),
+                                html.P(data.get('description', 'Sin descripción'), 
+                                      className="text-muted mb-2"),
+                                html.Small([
+                                    html.I(className="fas fa-tags me-1"),
+                                    f"{data.get('count', 0)} clases"
+                                ], className="text-muted"),
+                                html.Br(),
+                                html.Small([
+                                    html.I(className="fas fa-clock me-1"),
+                                    f"Creado: {data.get('created_at', 'Desconocido')[:10]}"
+                                ], className="text-muted"),
+                                dbc.ButtonGroup([
+                                    dbc.Button([
+                                        html.I(className="fas fa-eye me-1"),
+                                        "Ver"
+                                    ], size="sm", color="outline-primary"),
+                                    dbc.Button([
+                                        html.I(className="fas fa-edit me-1"),
+                                        "Editar"
+                                    ], size="sm", color="outline-secondary"),
+                                    dbc.Button([
+                                        html.I(className="fas fa-trash me-1"),
+                                        "Eliminar"
+                                    ], size="sm", color="outline-danger")
+                                ], className="mt-3")
+                            ])
+                        ], className="mb-3 shadow-sm")
+                        
+                        file_cards.append(card)
+                    except Exception as e:
+                        print(f"Error cargando {file_path}: {e}")
+                        continue
+                
+                return file_cards
+            except Exception as e:
+                return [dbc.Alert(f"❌ Error cargando archivos: {str(e)}", color="danger")]
+            
+            return no_update
+        
         # Callback para cargar lista de archivos de clases
         @self.app.callback(
             Output('classes-files-list', 'children'),
             [Input('current-page', 'data'),
-             Input('refresh-classes-list', 'n_clicks'),
-             Input('save-classes-file', 'n_clicks')],
+             Input('refresh-classes-list', 'n_clicks')],
             prevent_initial_call=False
         )
-        def load_classes_files_list(current_page, refresh_clicks, save_clicks):
+        def load_classes_files_list(current_page, refresh_clicks):
             """Cargar y mostrar lista de archivos de clases"""
             if current_page and current_page.get('page') != 'classes':
                 return no_update
@@ -2691,6 +2846,240 @@ class AdvancedAnnotationSuite:
                 
             except Exception as e:
                 return [dbc.Alert(f"❌ Error cargando archivos: {str(e)}", color="danger")]
+
+        # Callback específico para actualizar el selector de entrenamiento
+        @self.app.callback(
+            Output('custom-classes-file-selector', 'options'),
+            [Input('current-page', 'data'),
+             Input('refresh-classes-files-btn', 'n_clicks')],
+            prevent_initial_call=True
+        )
+        def update_training_classes_selector(current_page, refresh_clicks):
+            """Actualizar selector de entrenamiento específicamente"""
+            try:
+                # Solo actualizar si estamos en la página de entrenamiento
+                if not current_page or current_page.get('page') != 'training':
+                    return no_update
+                
+                print(f"🏋️ Actualizando selector de entrenamiento...")
+                    
+                # Cargar archivos de clases disponibles
+                classes_files = list(classes_dir.glob("*.json"))
+                print(f"📁 Archivos de clases encontrados: {[f.name for f in classes_files]}")
+                
+                # Opciones base
+                base_options = [{"label": "Usar data.yaml por defecto", "value": "default"}]
+                
+                # Agregar archivos de clases
+                for file_path in sorted(classes_files):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        base_options.append({
+                            "label": f"📁 {data.get('name', file_path.stem)} ({len(data.get('classes', []))} clases)",
+                            "value": file_path.name
+                        })
+                    except Exception as e:
+                        print(f"Error cargando {file_path}: {e}")
+                        continue
+                
+                return base_options
+                
+            except Exception as e:
+                print(f"Error actualizando selector de entrenamiento: {e}")
+                return [{"label": "Usar data.yaml por defecto", "value": "default"}]
+
+        # Callback para actualizar el selector principal de clases en entrenamiento
+        @self.app.callback(
+            Output('classes-source-selector', 'options'),
+            [Input('current-page', 'data'),
+             Input('refresh-training-classes-btn', 'n_clicks')],
+            prevent_initial_call=True
+        )
+        def update_main_training_classes_selector(current_page, refresh_clicks):
+            """Actualizar selector principal de clases en entrenamiento"""
+            try:
+                # Solo actualizar si estamos en la página de entrenamiento
+                if not current_page or current_page.get('page') != 'training':
+                    return no_update
+                
+                print(f"🏋️ Actualizando selector principal de entrenamiento...")
+                
+                # Usar la función helper para obtener las opciones
+                return self._get_classes_options()
+                
+            except Exception as e:
+                print(f"Error actualizando selector principal de entrenamiento: {e}")
+                return [{"label": "Usar data.yaml por defecto", "value": "default"}]
+
+        # Callback específico para actualizar los selectores de la página de archivos
+        @self.app.callback(
+            Output({'type': 'classes-selector', 'index': ALL}, 'options'),
+            [Input('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def update_files_classes_selectors(current_page):
+            """Actualizar selectores de archivos específicamente"""
+            try:
+                # Solo actualizar si estamos en la página de archivos
+                if not current_page or current_page.get('page') != 'files':
+                    return no_update
+                
+                print(f"🔄 Actualizando selectores de archivos...")
+                
+                # Cargar archivos de clases disponibles
+                classes_files = list(classes_dir.glob("*.json"))
+                print(f"📁 Archivos de clases encontrados: {[f.name for f in classes_files]}")
+                
+                # Opciones base
+                base_options = [{"label": "Usar data.yaml por defecto", "value": "default"}]
+                
+                # Agregar archivos de clases
+                for file_path in sorted(classes_files):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        base_options.append({
+                            "label": f"📁 {data.get('name', file_path.stem)} ({len(data.get('classes', []))} clases)",
+                            "value": file_path.name
+                        })
+                    except Exception as e:
+                        print(f"Error cargando {file_path}: {e}")
+                        continue
+                
+                # Retornar las mismas opciones para todos los selectores
+                # Como no sabemos cuántos selectores hay, retornamos lista con muchas opciones
+                # Dash solo usará las que necesite
+                return [base_options] * 20  # Máximo 20 videos por página
+                
+            except Exception as e:
+                print(f"Error actualizando selectores de archivos: {e}")
+                # Retornar lista vacía en caso de error
+                return [base_options] * 20
+
+        # Callback para mostrar información del archivo de clases seleccionado en entrenamiento
+        @self.app.callback(
+            Output('selected-classes-file-info', 'children'),
+            [Input('custom-classes-file-selector', 'value')],
+            [State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def show_selected_classes_info(selected_file, current_page):
+            """Mostrar información del archivo de clases seleccionado"""
+            # Solo procesar si estamos en la página de entrenamiento
+            if not current_page or current_page.get('page') != 'training':
+                return no_update
+                
+            if not selected_file or selected_file == "default":
+                return html.Div([
+                    html.Small("Se usará el archivo data.yaml del dataset", className="text-muted")
+                ])
+            
+            try:
+                file_path = classes_dir / selected_file
+                if not file_path.exists():
+                    return dbc.Alert("❌ Archivo no encontrado", color="danger")
+                
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                classes_preview = ", ".join(data.get('classes', [])[:8])
+                if len(data.get('classes', [])) > 8:
+                    classes_preview += "..."
+                
+                return dbc.Card([
+                    dbc.CardBody([
+                        html.H6(data.get('name', 'Sin nombre'), className="card-title small"),
+                        html.P(data.get('description', 'Sin descripción'), className="card-text small text-muted"),
+                        html.Div([
+                            html.Strong(f"{len(data.get('classes', []))} clases: ", className="small"),
+                            html.Span(classes_preview, className="small text-info")
+                        ])
+                    ], className="py-2")
+                ], className="border-light")
+                
+            except Exception as e:
+                return dbc.Alert(f"❌ Error: {str(e)}", color="danger")
+
+        # Callback para actualizar información del archivo de clases seleccionado en entrenamiento
+        @self.app.callback(
+            [Output('training-classes-file-info', 'children'),
+             Output('training-classes-summary', 'children', allow_duplicate=True)],
+            [Input('classes-source-selector', 'value'),
+             Input('refresh-training-classes-btn', 'n_clicks')],
+            [State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def update_training_classes_info(selected_file, refresh_clicks, current_page):
+            """Actualizar información del archivo de clases seleccionado"""
+            # Solo procesar si estamos en la página de entrenamiento
+            if not current_page or current_page.get('page') != 'training':
+                return no_update, no_update
+                
+            try:
+                if selected_file == "default" or not selected_file:
+                    # Usar data.yaml por defecto
+                    info_content = dbc.Alert([
+                        html.I(className="fas fa-file-alt me-2"),
+                        "Usando archivo data.yaml por defecto"
+                    ], color="info")
+                    
+                    summary_content = dbc.Alert([
+                        html.I(className="fas fa-tags me-2"),
+                        "Se usarán las clases definidas en el archivo data.yaml del dataset seleccionado"
+                    ], color="primary")
+                    
+                    return info_content, summary_content
+                
+                else:
+                    # Cargar información del archivo seleccionado
+                    from pathlib import Path
+                    import json
+                    
+                    classes_dir = Path('classes')
+                    file_path = classes_dir / selected_file
+                    
+                    if file_path.exists():
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        classes = data.get('classes', [])
+                        
+                        info_content = dbc.Alert([
+                            html.H6([
+                                html.I(className="fas fa-file me-2"),
+                                data.get('name', 'Sin nombre')
+                            ], className="mb-2"),
+                            html.P(data.get('description', 'Sin descripción'), className="mb-2"),
+                            html.Small([
+                                html.I(className="fas fa-calendar me-1"),
+                                f"Creado: {data.get('created_at', 'Desconocido')[:10]}"
+                            ], className="text-muted")
+                        ], color="success")
+                        
+                        summary_content = dbc.Alert([
+                            html.H6([
+                                html.I(className="fas fa-tags me-2"),
+                                f"Clases para entrenamiento ({len(classes)})"
+                            ], className="mb-2"),
+                            html.P(", ".join(classes[:15]) + ("..." if len(classes) > 15 else ""))
+                        ], color="success")
+                        
+                        return info_content, summary_content
+                    
+                    else:
+                        error_content = dbc.Alert([
+                            html.I(className="fas fa-exclamation-triangle me-2"),
+                            f"No se pudo encontrar el archivo: {selected_file}"
+                        ], color="danger")
+                        
+                        return error_content, error_content
+                    
+            except Exception as e:
+                error_content = dbc.Alert(f"❌ Error: {str(e)}", color="danger")
+                return error_content, error_content
 
     def _setup_training_callbacks(self):
         """Configurar callbacks para Entrenamiento"""
@@ -3667,10 +4056,7 @@ class AdvancedAnnotationSuite:
                             ], className="small fw-bold text-muted"),
                             dbc.Select(
                                 id={'type': 'classes-selector', 'index': idx},
-                                options=[
-                                    {"label": "Usar data.yaml por defecto", "value": "default"},
-                                    {"label": "Cargar archivos de clases...", "value": "loading"}
-                                ],
+                                options=self._get_classes_options(),
                                 value="default",
                                 size="sm",
                                 className="mb-2"
@@ -3819,6 +4205,60 @@ class AdvancedAnnotationSuite:
             
         except Exception as e:
             print(f"Error recargando dataset: {e}")
+
+    def _load_custom_classes(self, classes_file):
+        """Cargar clases personalizadas desde un archivo JSON"""
+        try:
+            from pathlib import Path
+            import json
+            
+            classes_path = Path('classes') / classes_file
+            if classes_path.exists():
+                with open(classes_path, 'r', encoding='utf-8') as f:
+                    classes_data = json.load(f)
+                
+                # Actualizar las clases disponibles
+                custom_classes = classes_data.get('classes', [])
+                self.config_loader.classes = {i: class_name for i, class_name in enumerate(custom_classes)}
+                self.config_loader.classes_list = custom_classes
+                
+                # Actualizar las clases globales de la instancia
+                self.classes = self.config_loader.classes
+                
+                print(f"🔧 self.classes actualizado: {self.classes}")
+                print(f"🔧 Tipo de self.classes: {type(self.classes)}")
+                
+                # Actualizar los colores para las nuevas clases
+                self.class_colors = self.config_loader.get_colors(len(custom_classes))
+                
+                print(f"✅ Clases personalizadas cargadas desde {classes_file}: {custom_classes}")
+                print(f"🔧 Config_loader.classes actualizado: {self.config_loader.classes}")
+                print(f"🔧 Config_loader.classes_list actualizado: {self.config_loader.classes_list}")
+                
+                # Actualizar el annotation_manager
+                if hasattr(self, 'annotation_manager'):
+                    if hasattr(self.annotation_manager, 'config'):
+                        self.annotation_manager.config.classes = self.config_loader.classes
+                    elif hasattr(self.annotation_manager, 'classes'):
+                        self.annotation_manager.classes = self.config_loader.classes
+                
+                # Actualizar el figure_generator con las nuevas clases y colores
+                if hasattr(self, 'figure_generator'):
+                    self.figure_generator.class_colors = self.class_colors
+                    print(f"🎨 Figure generator actualizado con {len(self.class_colors)} colores")
+                
+                # Actualizar el callback_manager
+                if hasattr(self, 'callback_manager'):
+                    self.callback_manager.classes = self.classes
+                    print(f"🔄 Callback manager actualizado con clases: {list(self.classes.values())}")
+                    
+            else:
+                print(f"❌ Archivo de clases no encontrado: {classes_path}")
+                
+        except Exception as e:
+            print(f"Error cargando clases personalizadas: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _run_autodistill_process(self, dataset_path, base_model, classes, confidence_threshold, iou_threshold):
         """Ejecutar proceso real de AutoDistill"""
@@ -4103,7 +4543,7 @@ def main():
         print(f"📁 Directorio de trabajo: {suite.dataset_path}")
         print(f"📄 Archivo de clases: {suite.classes_yaml}")
         print(f"🖼️ Imágenes encontradas: {len(suite.image_files)}")
-        print(f"🏷️ Clases disponibles ({len(suite.classes)}): {', '.join(suite.classes)}")
+        print(f"🏷️ Clases disponibles ({len(suite.classes)}): {', '.join(suite.classes.values())}")
         print("🌐 Abriendo en: http://localhost:8050")
         print("✅ Aplicación lista!")
         

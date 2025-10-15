@@ -1,0 +1,13 @@
+{
+  "name": "vehiculos",
+  "description": "Clases para detección de vehículos",
+  "classes": [
+    "car",
+    "truck",
+    "bus",
+    "motorcycle",
+    "bicycle"
+  ],
+  "created_at": "2025-01-14 17:30:00",
+  "count": 5
+}
