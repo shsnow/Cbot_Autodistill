@@ -2657,7 +2657,7 @@ class AdvancedAnnotationSuite:
             prevent_initial_call=True
         )
         def load_available_datasets(current_page):
-            """Cargar datasets disponibles desde las carpetas output y Test_Dataset"""
+            """Cargar datasets disponibles desde las carpetas output y Merged"""
             if not current_page or current_page.get('page') != 'autodistill':
                 return no_update
             
@@ -2686,10 +2686,10 @@ class AdvancedAnnotationSuite:
                                     'value': str(folder)
                                 })
                 
-                # Buscar en carpeta Test_Dataset (datasets unidos)
-                test_dataset_path = Path('Test_Dataset')
-                if test_dataset_path.exists():
-                    for folder in test_dataset_path.iterdir():
+                # Buscar en carpeta Merged (datasets unidos)
+                merged_path = Path('Merged')
+                if merged_path.exists():
+                    for folder in merged_path.iterdir():
                         if folder.is_dir():
                             # Verificar que la carpeta contiene imágenes
                             has_images = any(
@@ -3451,10 +3451,10 @@ class AdvancedAnnotationSuite:
                                     'value': str(folder)
                                 })
                 
-                # 2. Buscar datasets unidos en 'Test_Dataset'
-                test_dataset_path = Path('Test_Dataset')
-                if test_dataset_path.exists():
-                    for dataset_folder in test_dataset_path.iterdir():
+                # 2. Buscar datasets unidos en 'Merged'
+                merged_path = Path('Merged')
+                if merged_path.exists():
+                    for dataset_folder in merged_path.iterdir():
                         if dataset_folder.is_dir():
                             # Filtrar carpetas que no son datasets válidos
                             if dataset_folder.name in ['labels', '__pycache__', '.git', 'runs', 'weights']:
@@ -4563,10 +4563,10 @@ class AdvancedAnnotationSuite:
                             }
                             expanded_videos.append(subdataset)
         
-        # Buscar datasets unidos en Test_Dataset
-        test_dataset_path = Path('Test_Dataset')
-        if test_dataset_path.exists():
-            for dataset_folder in test_dataset_path.iterdir():
+        # Buscar datasets unidos en Merged
+        merged_path = Path('Merged')
+        if merged_path.exists():
+            for dataset_folder in merged_path.iterdir():
                 if dataset_folder.is_dir():
                     # Filtrar carpetas que no son datasets válidos
                     if dataset_folder.name in ['labels', '__pycache__', '.git', 'runs', 'weights']:
@@ -5245,7 +5245,9 @@ class AdvancedAnnotationSuite:
                 print(f"📊 Datasets seleccionados: {len(selected_datasets)}")
                 
                 # Crear directorio para el nuevo dataset
-                base_dataset_path = "Test_Dataset"  # Usar ruta fija en lugar de self.dataset_path
+                base_dataset_path = "Merged"  # Usar carpeta específica para datasets unidos
+                os.makedirs(base_dataset_path, exist_ok=True)  # Crear carpeta Merged si no existe
+                
                 new_dataset_path = os.path.join(base_dataset_path, f"merged_{new_name.strip()}")
                 print(f"📁 Creando dataset en: {new_dataset_path}")
                 
