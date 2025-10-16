@@ -1,4 +1,4 @@
-videos
+
 runs
 dataset_cruce_3
 CRUCE_COLON_1_class
@@ -8,7 +8,7 @@ weas
 a
 
 # Ignorar directorios de datos
-videos/
+videos/*
 frames/
 dataset/
 video_camilo
@@ -16,5 +16,8 @@ dataset_camilo
 output
 vids
 Cbot_Autodistill
-Test_Dataset
+Test_Dataset/T*
+Test_Dataset/m*
+Test_Dataset/d*
+
 static
