@@ -548,6 +548,7 @@ class AdvancedAnnotationSuite:
         self._setup_classes_callbacks()
         self._setup_autodistill_callbacks()
         self._setup_training_callbacks()
+        self._setup_dataset_merge_callbacks()
     
     def create_home_page(self):
         """Crear la página de inicio"""
@@ -778,6 +779,22 @@ class AdvancedAnnotationSuite:
                                      className="w-100 mb-2")
                                 ], md=2),
                                 dbc.Col([
+                                    dbc.Button([
+                                        html.I(className="fas fa-check-square me-2"),
+                                        "Seleccionar Varios Datasets"
+                                    ], id="multi-select-btn", color="warning", 
+                                     className="w-100 mb-2")
+                                ], md=2),
+                                dbc.Col([
+                                    dbc.Button([
+                                        html.I(className="fas fa-layer-group me-2"),
+                                        "Unir Datasets Seleccionados"
+                                    ], id="merge-datasets-btn", color="danger", 
+                                     className="w-100 mb-2", disabled=True)
+                                ], md=2)
+                            ]),
+                            dbc.Row([
+                                dbc.Col([
                                     html.Div([
                                         html.Label("Carpeta de Videos:", className="mb-1"),
                                         dbc.Input(
@@ -832,7 +849,127 @@ class AdvancedAnnotationSuite:
                 dismissable=True, duration=4000,
                 style={"position": "fixed", "top": 66, "right": 10, 
                       "width": 350, "z-index": 9999}
-            )
+            ),
+            
+            # Modal para configuración de unión de datasets
+            dbc.Modal([
+                dbc.ModalHeader([
+                    html.H4([
+                        html.I(className="fas fa-layer-group me-2"),
+                        "Configuración de Unión de Datasets"
+                    ])
+                ]),
+                dbc.ModalBody([
+                    # Nombre del nuevo dataset
+                    html.Div([
+                        html.Label("Nombre del nuevo dataset:", className="fw-bold mb-2"),
+                        dbc.Input(
+                            id="merge-name",
+                            placeholder="Ej: Mi_Dataset_Combinado",
+                            className="mb-2"
+                        ),
+                        html.Small(id="merge-name-validation", className="text-muted")
+                    ], className="mb-4"),
+                    
+                    # Método de renombrado
+                    html.Div([
+                        html.Label("Método de Renombrado de Archivos:", className="fw-bold mb-2"),
+                        dbc.RadioItems(
+                            id="rename-strategy",
+                            options=[
+                                {
+                                    "label": [
+                                        html.Div([
+                                            html.Strong("Secuencial Numérico"),
+                                            html.Br(),
+                                            html.Small("(ej: 000001.jpg, 000002.txt) Ideal para crear un dataset limpio y ordenado", 
+                                                     className="text-muted")
+                                        ])
+                                    ],
+                                    "value": "sequential"
+                                },
+                                {
+                                    "label": [
+                                        html.Div([
+                                            html.Strong("Prefijo del Dataset Original"),
+                                            html.Br(),
+                                            html.Small("(ej: dataset_perros_frame_15.jpg) Útil para mantener la trazabilidad del origen", 
+                                                     className="text-muted")
+                                        ])
+                                    ],
+                                    "value": "prefix"
+                                }
+                            ],
+                            value="sequential",
+                            className="mb-3"
+                        )
+                    ], className="mb-4"),
+                    
+                    # Acción sobre datasets originales
+                    html.Div([
+                        html.Label("Acción sobre los Datasets Originales:", className="fw-bold mb-2"),
+                        dbc.RadioItems(
+                            id="merge-action",
+                            options=[
+                                {
+                                    "label": [
+                                        html.Div([
+                                            html.Strong("Copiar (Recomendado)", style={"color": "#28a745"}),
+                                            html.Br(),
+                                            html.Small("Mantiene los datasets originales intactos", 
+                                                     className="text-muted")
+                                        ])
+                                    ],
+                                    "value": "copy"
+                                },
+                                {
+                                    "label": [
+                                        html.Div([
+                                            html.Strong("Mover", style={"color": "#dc3545"}),
+                                            html.Br(),
+                                            html.Small("Transfiere los archivos y elimina las carpetas originales. ¡Acción destructiva!", 
+                                                     className="text-danger")
+                                        ])
+                                    ],
+                                    "value": "move"
+                                }
+                            ],
+                            value="copy",
+                            className="mb-3"
+                        )
+                    ], className="mb-4"),
+                    
+                    # Resumen dinámico
+                    dbc.Alert(
+                        id="merge-summary",
+                        color="info",
+                        children="Selecciona datasets para ver el resumen..."
+                    ),
+                    
+                    # Progreso de la operación (oculto inicialmente)
+                    html.Div([
+                        html.H6("Progreso de la unión:", className="mt-3 mb-2"),
+                        dbc.Progress(
+                            id="merge-progress",
+                            value=0,
+                            striped=True,
+                            animated=True,
+                            className="mb-2"
+                        ),
+                        html.Div(id="merge-status")
+                    ], id="merge-progress-container", style={"display": "none"})
+                ]),
+                dbc.ModalFooter([
+                    dbc.Button("Cancelar", id="merge-cancel-btn", color="secondary", className="me-2"),
+                    dbc.Button([
+                        html.I(className="fas fa-layer-group me-2"),
+                        "Confirmar y Unir"
+                    ], id="merge-confirm-btn", color="success", disabled=True)
+                ])
+            ], id="merge-datasets-modal", is_open=False, size="lg"),
+            
+            # Store para datos de selección múltiple
+            dcc.Store(id="multi-select-data", data={"active": False, "selected": []})
             
         ], fluid=True)
     
@@ -1993,11 +2130,12 @@ class AdvancedAnnotationSuite:
              Output('videos-grid', 'children')],
             [Input('refresh-videos-btn', 'n_clicks'),
              Input('videos-folder-path', 'value'),
-             Input('processing-status', 'data')],
+             Input('processing-status', 'data'),
+             Input('multi-select-data', 'data')],
             [State('current-page', 'data')],
             prevent_initial_call=True
         )
-        def load_videos(refresh_clicks, videos_folder, processing_status, current_page):
+        def load_videos(refresh_clicks, videos_folder, processing_status, multi_select_data, current_page):
             """Cargar lista de videos de la carpeta"""
             # Solo ejecutar si estamos en la página de archivos
             if current_page and current_page.get('page') != 'files':
@@ -2047,7 +2185,7 @@ class AdvancedAnnotationSuite:
                 ])
                 
                 # Generar grid de videos
-                grid = self._create_videos_grid(expanded_videos, processing_status)
+                grid = self._create_videos_grid(expanded_videos, processing_status, multi_select_data)
                 
                 return expanded_videos, stats_content, grid
                 
@@ -2074,7 +2212,11 @@ class AdvancedAnnotationSuite:
             try:
                 processor = VideoProcessor("videos")  # carpeta por defecto
                 videos = processor.get_video_files()
-                return [videos]
+                
+                # Expandir videos para incluir subdatasets de AutoDistill y datasets unidos
+                expanded_videos = self._expand_videos_with_subdatasets(videos)
+                
+                return [expanded_videos]
                 
             except Exception as e:
                 print(f"Error cargando videos iniciales: {e}")
@@ -2086,10 +2228,11 @@ class AdvancedAnnotationSuite:
              Output('videos-grid', 'children', allow_duplicate=True)],
             [Input('videos-data', 'data')],
             [State('current-page', 'data'),
-             State('processing-status', 'data')],
+             State('processing-status', 'data'),
+             State('multi-select-data', 'data')],
             prevent_initial_call=True
         )
-        def update_videos_display(videos_data, current_page, processing_status):
+        def update_videos_display(videos_data, current_page, processing_status, multi_select_data):
             """Actualizar display de videos cuando cambian los datos"""
             # Solo ejecutar si estamos en la página de archivos
             if not current_page or current_page.get('page') != 'files':
@@ -2137,7 +2280,7 @@ class AdvancedAnnotationSuite:
                 ])
                 
                 # Generar grid de videos
-                grid = self._create_videos_grid(videos_data, processing_status or {})
+                grid = self._create_videos_grid(videos_data, processing_status or {}, multi_select_data)
                 
                 return stats_content, grid
                 
@@ -2514,34 +2657,55 @@ class AdvancedAnnotationSuite:
             prevent_initial_call=True
         )
         def load_available_datasets(current_page):
-            """Cargar datasets disponibles desde la carpeta output"""
+            """Cargar datasets disponibles desde las carpetas output y Test_Dataset"""
             if not current_page or current_page.get('page') != 'autodistill':
                 return no_update
             
             try:
-                output_path = Path('output')
-                if not output_path.exists():
-                    return []
-                
                 options = []
-                for folder in output_path.iterdir():
-                    if folder.is_dir():
-                        # Verificar que la carpeta contiene imágenes
-                        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
-                        has_images = any(
-                            any(folder.glob(f'*{ext}')) for ext in image_extensions
-                        )
-                        
-                        if has_images:
-                            # Contar imágenes
-                            image_count = sum(
-                                len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
+                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                
+                # Buscar en carpeta output (datasets de videos procesados)
+                output_path = Path('output')
+                if output_path.exists():
+                    for folder in output_path.iterdir():
+                        if folder.is_dir():
+                            # Verificar que la carpeta contiene imágenes
+                            has_images = any(
+                                any(folder.glob(f'*{ext}')) for ext in image_extensions
                             )
                             
-                            options.append({
-                                'label': f"{folder.name} ({image_count} imágenes)",
-                                'value': str(folder)
-                            })
+                            if has_images:
+                                # Contar imágenes
+                                image_count = sum(
+                                    len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
+                                )
+                                
+                                options.append({
+                                    'label': f"📹 {folder.name} ({image_count} imágenes)",
+                                    'value': str(folder)
+                                })
+                
+                # Buscar en carpeta Test_Dataset (datasets unidos)
+                test_dataset_path = Path('Test_Dataset')
+                if test_dataset_path.exists():
+                    for folder in test_dataset_path.iterdir():
+                        if folder.is_dir():
+                            # Verificar que la carpeta contiene imágenes
+                            has_images = any(
+                                any(folder.glob(f'*{ext}')) for ext in image_extensions
+                            )
+                            
+                            if has_images:
+                                # Contar imágenes
+                                image_count = sum(
+                                    len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
+                                )
+                                
+                                options.append({
+                                    'label': f"🔗 {folder.name} ({image_count} imágenes) - Dataset Unido",
+                                    'value': str(folder)
+                                })
                 
                 return sorted(options, key=lambda x: x['label'])
                 
@@ -3037,10 +3201,11 @@ class AdvancedAnnotationSuite:
         # Callback específico para actualizar los selectores de la página de archivos
         @self.app.callback(
             Output({'type': 'classes-selector', 'index': ALL}, 'options'),
-            [Input('current-page', 'data')],
+            [Input('current-page', 'data'),
+             Input('files-grid-data', 'data')],
             prevent_initial_call=True
         )
-        def update_files_classes_selectors(current_page):
+        def update_files_classes_selectors(current_page, files_data):
             """Actualizar selectores de archivos específicamente"""
             try:
                 # Solo actualizar si estamos en la página de archivos
@@ -3070,15 +3235,26 @@ class AdvancedAnnotationSuite:
                         print(f"Error cargando {file_path}: {e}")
                         continue
                 
-                # Retornar las mismas opciones para todos los selectores
-                # Como no sabemos cuántos selectores hay, retornamos lista con muchas opciones
-                # Dash solo usará las que necesite
-                return [base_options] * 20  # Máximo 20 videos por página
+                # Obtener número de videos/datasets actual
+                try:
+                    videos_data = self._get_videos_data()
+                    num_videos = len(videos_data)
+                    print(f"📊 Número de videos detectado: {num_videos}")
+                except:
+                    num_videos = 20  # Fallback
+                
+                # Retornar las opciones para el número correcto de selectores
+                return [base_options] * num_videos
                 
             except Exception as e:
                 print(f"Error actualizando selectores de archivos: {e}")
                 # Retornar lista vacía en caso de error
-                return [base_options] * 20
+                try:
+                    videos_data = self._get_videos_data()
+                    num_videos = len(videos_data)
+                except:
+                    num_videos = 20
+                return [base_options] * num_videos
 
         # Callback para mostrar información del archivo de clases seleccionado en entrenamiento
         @self.app.callback(
@@ -3222,58 +3398,103 @@ class AdvancedAnnotationSuite:
                 return no_update
             
             try:
-                output_path = Path('output')
-                if not output_path.exists():
-                    return []
-                
                 options = []
-                for folder in output_path.iterdir():
-                    if folder.is_dir():
-                        # Verificar que la carpeta contiene imágenes y etiquetas
-                        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
-                        has_images = any(
-                            any(folder.glob(f'*{ext}')) for ext in image_extensions
-                        )
-                        
-                        labels_path = folder / 'labels'
-                        has_labels = labels_path.exists() and any(labels_path.glob('*.txt'))
-                        
-                        # Verificar si ya está dividido en train/valid
-                        train_path = folder / 'train'
-                        valid_path = folder / 'valid'
-                        is_split = train_path.exists() and valid_path.exists()
-                        
-                        if is_split:
-                            # Dataset ya dividido - contar imágenes en train y valid
-                            train_images = sum(
-                                len(list((train_path / 'images').glob(f'*{ext}'))) 
-                                for ext in image_extensions
-                                if (train_path / 'images').exists()
+                
+                # 1. Buscar en carpeta 'output' (datasets procesados)
+                output_path = Path('output')
+                if output_path.exists():
+                    for folder in output_path.iterdir():
+                        if folder.is_dir():
+                            # Verificar que la carpeta contiene imágenes y etiquetas
+                            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                            has_images = any(
+                                any(folder.glob(f'*{ext}')) for ext in image_extensions
                             )
-                            valid_images = sum(
-                                len(list((valid_path / 'images').glob(f'*{ext}'))) 
-                                for ext in image_extensions
-                                if (valid_path / 'images').exists()
-                            )
-                            total_images = train_images + valid_images
                             
-                            if total_images > 0:
+                            labels_path = folder / 'labels'
+                            has_labels = labels_path.exists() and any(labels_path.glob('*.txt'))
+                            
+                            # Verificar si ya está dividido en train/valid
+                            train_path = folder / 'train'
+                            valid_path = folder / 'valid'
+                            is_split = train_path.exists() and valid_path.exists()
+                            
+                            if is_split:
+                                # Dataset ya dividido - contar imágenes en train y valid
+                                train_images = sum(
+                                    len(list((train_path / 'images').glob(f'*{ext}'))) 
+                                    for ext in image_extensions
+                                    if (train_path / 'images').exists()
+                                )
+                                valid_images = sum(
+                                    len(list((valid_path / 'images').glob(f'*{ext}'))) 
+                                    for ext in image_extensions
+                                    if (valid_path / 'images').exists()
+                                )
+                                total_images = train_images + valid_images
+                                
+                                if total_images > 0:
+                                    options.append({
+                                        'label': f"✅ {folder.name} (DIVIDIDO: {train_images} train, {valid_images} valid)",
+                                        'value': str(folder)
+                                    })
+                            
+                            elif has_images and has_labels:
+                                # Dataset sin dividir - contar imágenes y etiquetas
+                                image_count = sum(
+                                    len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
+                                )
+                                label_count = len(list(labels_path.glob('*.txt')))
+                                
                                 options.append({
-                                    'label': f"✅ {folder.name} (DIVIDIDO: {train_images} train, {valid_images} valid)",
+                                    'label': f"📂 {folder.name} ({image_count} imágenes, {label_count} etiquetas)",
                                     'value': str(folder)
                                 })
-                        
-                        elif has_images and has_labels:
-                            # Dataset sin dividir - contar imágenes y etiquetas
-                            image_count = sum(
-                                len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
-                            )
-                            label_count = len(list(labels_path.glob('*.txt')))
+                
+                # 2. Buscar datasets unidos en 'Test_Dataset'
+                test_dataset_path = Path('Test_Dataset')
+                if test_dataset_path.exists():
+                    for dataset_folder in test_dataset_path.iterdir():
+                        if dataset_folder.is_dir():
+                            # Filtrar carpetas que no son datasets válidos
+                            if dataset_folder.name in ['labels', '__pycache__', '.git', 'runs', 'weights']:
+                                continue
                             
-                            options.append({
-                                'label': f"📂 {folder.name} ({image_count} imágenes, {label_count} etiquetas)",
-                                'value': str(folder)
-                            })
+                            # Verificar si tiene imágenes
+                            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                            image_count = 0
+                            label_count = 0
+                            
+                            for ext in image_extensions:
+                                images = list(dataset_folder.glob(f'*{ext}'))
+                                image_count += len(images)
+                            
+                            # Verificar si tiene etiquetas (en la carpeta principal o en subcarpeta labels)
+                            labels = list(dataset_folder.glob('*.txt'))
+                            labels_subfolder = dataset_folder / 'labels'
+                            if labels_subfolder.exists():
+                                labels.extend(list(labels_subfolder.glob('*.txt')))
+                            label_count = len(labels)
+                            
+                            has_images = image_count > 0
+                            has_labels = label_count > 0
+                            
+                            # Solo agregar datasets que tengan al menos imágenes
+                            if has_images:
+                                if has_labels:
+                                    # Marcar datasets unidos con un icono especial
+                                    icon = "🔗" if dataset_folder.name.startswith('merged_') else "📁"
+                                    options.append({
+                                        'label': f"{icon} {dataset_folder.name} ({image_count} imágenes, {label_count} etiquetas)",
+                                        'value': str(dataset_folder)
+                                    })
+                                else:
+                                    # Dataset sin etiquetas pero con imágenes (para AutoDistill)
+                                    icon = "🔗" if dataset_folder.name.startswith('merged_') else "📷"
+                                    options.append({
+                                        'label': f"{icon} {dataset_folder.name} ({image_count} imágenes, sin etiquetas)",
+                                        'value': str(dataset_folder)
+                                    })
                 
                 return sorted(options, key=lambda x: x['label'])
                 
@@ -4040,7 +4261,7 @@ class AdvancedAnnotationSuite:
                     ], color="success")
                 ])
 
-    def _create_videos_grid(self, videos, processing_status=None):
+    def _create_videos_grid(self, videos, processing_status=None, multi_select_data=None):
         """Crear grid de tarjetas de video"""
         from pathlib import Path
         
@@ -4048,6 +4269,7 @@ class AdvancedAnnotationSuite:
             return []
         
         processing_status = processing_status or {}
+        multi_select_data = multi_select_data or {"active": False, "selected": []}
         
         cards = []
         for idx, video in enumerate(videos):
@@ -4072,8 +4294,11 @@ class AdvancedAnnotationSuite:
             elif video['has_frames']:
                 if is_subdataset:
                     # Para subdatasets de AutoDistill
-                    if video.get('has_labels', False):
-                        # Subdataset con etiquetas
+                    dataset_type = video.get('dataset_type', 'unknown')
+                    print(f"🔍 Dataset {video['name']}: is_subdataset={is_subdataset}, dataset_type={dataset_type}, has_labels={video.get('has_labels', False)}")
+                    
+                    if video.get('has_labels', False) and dataset_type == 'autodistill':
+                        # Subdataset con etiquetas de AutoDistill
                         label_count = video.get('label_count', 0)
                         action_buttons = dbc.Button([
                             html.I(className="fas fa-robot me-2"),
@@ -4083,10 +4308,31 @@ class AdvancedAnnotationSuite:
                         
                         status_badge = dbc.Badge([
                             html.I(className="fas fa-robot me-1"),
-                            f"AutoDistill - {video.get('dataset_type', 'Dataset').title()}"
+                            f"AutoDistill - {video.get('subdataset_type', 'Dataset').title()}"
                         ], color="info", className="mb-2")
+                    elif dataset_type == 'merged':
+                        # Dataset unido - tratar como dataset completo
+                        print(f"🔗 Creando botones para dataset unido: {video['name']}")
+                        action_buttons = dbc.ButtonGroup([
+                            dbc.Button([
+                                html.I(className="fas fa-tags me-2"),
+                                "Revisar Etiquetas"
+                            ], id={'type': 'review-btn', 'index': idx}, 
+                             color="primary", size="sm"),
+                            dbc.Button([
+                                html.I(className="fas fa-robot me-2"),
+                                "AutoDistill"
+                            ], id={'type': 'autodistill-btn', 'index': idx}, 
+                             color="success", size="sm")
+                        ], className="w-100")
+                        
+                        status_badge = dbc.Badge([
+                            html.I(className="fas fa-layer-group me-1"),
+                            f"Dataset Unido - {video.get('label_count', 0)} etiquetas"
+                        ], color="warning", className="mb-2")
                     else:
                         # Subdataset solo con imágenes
+                        print(f"⚠️ Dataset {video['name']} clasificado como 'solo imágenes': dataset_type={dataset_type}")
                         action_buttons = dbc.Button([
                             html.I(className="fas fa-images me-2"),
                             "Ver Imágenes"
@@ -4099,9 +4345,14 @@ class AdvancedAnnotationSuite:
                         ], color="secondary", className="mb-2")
                 else:
                     # Para videos originales
-                    # Verificar si tiene etiquetas de AutoDistill
-                    labels_path = Path('output') / video['name_without_ext'] / 'labels'
-                    has_autodistill_labels = labels_path.exists() and any(labels_path.glob("*.txt"))
+                    # Verificar si tiene etiquetas de AutoDistill usando la información del video
+                    has_autodistill_labels = (video.get('has_autodistill_labels', False) or 
+                                            video.get('dataset_type') == 'autodistill')
+                    
+                    if not has_autodistill_labels:
+                        # Verificación adicional por si no se detectó antes
+                        labels_path = Path('output') / video['name_without_ext'] / 'labels'
+                        has_autodistill_labels = labels_path.exists() and any(labels_path.glob("*.txt"))
                     
                     if has_autodistill_labels:
                         # Si tiene etiquetas de AutoDistill
@@ -4154,57 +4405,72 @@ class AdvancedAnnotationSuite:
                     "Sin procesar"
                 ], color="warning", className="mb-2")
             
+            # Crear contenido de la tarjeta
+            card_body_content = [
+                # Status badge
+                html.Div([status_badge], className="text-center"),
+                
+                # Información del video
+                html.H6(video['name'], className="card-title text-truncate", 
+                       title=video['name']),
+                
+                html.Div([
+                    html.Small([
+                        html.I(className="fas fa-clock me-1"),
+                        video.get('duration_str', 'N/A')
+                    ], className="text-muted d-block"),
+                    html.Small([
+                        html.I(className="fas fa-expand-arrows-alt me-1"),
+                        video.get('resolution', 'N/A')
+                    ], className="text-muted d-block"),
+                    html.Small([
+                        html.I(className="fas fa-hdd me-1"),
+                        video.get('file_size_str', 'N/A')
+                    ], className="text-muted d-block"),
+                    html.Small([
+                        html.I(className="fas fa-film me-1"),
+                        f"{video.get('frame_count', 0)} frames"
+                    ], className="text-muted d-block")
+                ], className="mb-2"),
+                
+                # Selector de archivo de clases
+                html.Div([
+                    html.Label([
+                        html.I(className="fas fa-tags me-1"),
+                        "Archivo de clases:"
+                    ], className="small fw-bold text-muted"),
+                    dbc.Select(
+                        id={'type': 'classes-selector', 'index': idx},
+                        options=self._get_classes_options(),
+                        value="default",
+                        size="sm",
+                        className="mb-2"
+                    )
+                ], className="mb-3"),
+                
+                # Botones de acción
+                action_buttons
+            ]
+            
+            # Agregar checkbox si está en modo selección múltiple
+            card_children = []
+            if multi_select_data.get("active", False):
+                is_selected = idx in multi_select_data.get("selected", [])
+                card_children.append(
+                    dbc.Checkbox(
+                        id={'type': 'dataset-checkbox', 'index': idx},
+                        value=is_selected,
+                        className="position-absolute",
+                        style={"top": "10px", "right": "10px", "z-index": 10}
+                    )
+                )
+            
+            card_children.append(dbc.CardBody(card_body_content, className="p-3"))
+            
             # Crear tarjeta
             card = dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        # Status badge
-                        html.Div([status_badge], className="text-center"),
-                        
-                        # Información del video
-                        html.H6(video['name'], className="card-title text-truncate", 
-                               title=video['name']),
-                        
-                        html.Div([
-                            html.Small([
-                                html.I(className="fas fa-clock me-1"),
-                                video.get('duration_str', 'N/A')
-                            ], className="text-muted d-block"),
-                            html.Small([
-                                html.I(className="fas fa-expand-arrows-alt me-1"),
-                                video.get('resolution', 'N/A')
-                            ], className="text-muted d-block"),
-                            html.Small([
-                                html.I(className="fas fa-hdd me-1"),
-                                video.get('file_size_str', 'N/A')
-                            ], className="text-muted d-block"),
-                            html.Small([
-                                html.I(className="fas fa-film me-1"),
-                                f"{video.get('frame_count', 0)} frames"
-                            ], className="text-muted d-block")
-                        ], className="mb-2"),
-                        
-                        # Selector de archivo de clases
-                        html.Div([
-                            html.Label([
-                                html.I(className="fas fa-tags me-1"),
-                                "Archivo de clases:"
-                            ], className="small fw-bold text-muted"),
-                            dbc.Select(
-                                id={'type': 'classes-selector', 'index': idx},
-                                options=self._get_classes_options(),
-                                value="default",
-                                size="sm",
-                                className="mb-2"
-                            )
-                        ], className="mb-3"),
-                        
-                        # Botones de acción
-                        action_buttons
-                        
-                    ], className="p-3")
-                ], className="h-100 border-0 shadow-sm hover-card",
-                   style={"background": "rgba(45, 55, 72, 0.8)"})
+                dbc.Card(card_children, className="h-100 border-0 shadow-sm hover-card",
+                        style={"background": "rgba(45, 55, 72, 0.8)"})
             ], md=6, lg=4, xl=3, className="mb-3")
             
             cards.append(card)
@@ -4235,8 +4501,14 @@ class AdvancedAnnotationSuite:
         expanded_videos = []
         
         for video in videos:
-            # Agregar el video original
-            expanded_videos.append(video)
+            # Verificar si el video tiene etiquetas de AutoDistill
+            video_copy = video.copy()
+            if self._has_autodistill_labels(video):
+                video_copy['has_autodistill_labels'] = True
+                video_copy['dataset_type'] = 'autodistill'
+            
+            # Agregar el video original (posiblemente modificado)
+            expanded_videos.append(video_copy)
             
             # Buscar subdatasets de AutoDistill
             video_folder = Path('output') / video['name_without_ext']
@@ -4276,16 +4548,94 @@ class AdvancedAnnotationSuite:
                                 'labels_path': str(labels_path) if has_labels else None,
                                 'size': video.get('size', 'N/A'),
                                 'duration': f"{image_count} imágenes, {label_count} etiquetas",
+                                'duration_str': f"{image_count} imágenes",
+                                'frame_count': image_count,
+                                'existing_frames': image_count,
+                                'file_size_str': video.get('file_size_str', 'AutoDistill'),
+                                'resolution': video.get('resolution', 'Original'),
                                 'has_frames': has_images,
                                 'has_labels': has_labels,
                                 'label_count': label_count,
                                 'is_subdataset': True,
                                 'parent_video': video['name_without_ext'],
-                                'dataset_type': subdir
+                                'dataset_type': 'autodistill',  # Marcar como AutoDistill
+                                'subdataset_type': subdir  # Mantener info de si es train/valid
                             }
                             expanded_videos.append(subdataset)
         
+        # Buscar datasets unidos en Test_Dataset
+        test_dataset_path = Path('Test_Dataset')
+        if test_dataset_path.exists():
+            for dataset_folder in test_dataset_path.iterdir():
+                if dataset_folder.is_dir():
+                    # Filtrar carpetas que no son datasets válidos
+                    if dataset_folder.name in ['labels', '__pycache__', '.git', 'runs', 'weights']:
+                        continue
+                        
+                    # Verificar si tiene imágenes
+                    image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                    image_count = 0
+                    label_count = 0
+                    
+                    for ext in image_extensions:
+                        images = list(dataset_folder.glob(f'*{ext}'))
+                        image_count += len(images)
+                    
+                    # Verificar si tiene etiquetas (en la carpeta principal o en subcarpeta labels)
+                    labels = list(dataset_folder.glob('*.txt'))
+                    labels_subfolder = dataset_folder / 'labels'
+                    if labels_subfolder.exists():
+                        labels.extend(list(labels_subfolder.glob('*.txt')))
+                    label_count = len(labels)
+                    
+                    print(f"🏷️ Dataset {dataset_folder.name}: {image_count} imágenes, {label_count} etiquetas")
+                    if labels_subfolder.exists():
+                        print(f"🏷️ Etiquetas en subcarpeta: {len(list(labels_subfolder.glob('*.txt')))}")
+                    
+                    has_images = image_count > 0
+                    has_labels = label_count > 0
+                    
+                    # Solo agregar datasets que tengan al menos imágenes
+                    if has_images:
+                        # Crear entrada para el dataset unido
+                        merged_dataset = {
+                            'name': dataset_folder.name,
+                            'name_without_ext': dataset_folder.name,
+                            'path': str(dataset_folder),
+                            'images_path': str(dataset_folder),
+                            'labels_path': str(dataset_folder) if has_labels else None,
+                            'size': 'N/A',
+                            'duration': f"{image_count} imágenes, {label_count} etiquetas",
+                            'duration_str': f"{image_count} imágenes",
+                            'frame_count': image_count,
+                            'existing_frames': image_count,
+                            'file_size_str': 'N/A',
+                            'resolution': 'Múltiples',
+                            'has_frames': has_images,
+                            'has_labels': has_labels,
+                            'label_count': label_count,
+                            'is_subdataset': True,
+                            'parent_video': 'merged_dataset',
+                            'dataset_type': 'merged'
+                        }
+                        expanded_videos.append(merged_dataset)
+        
         return expanded_videos
+    
+    def _get_videos_data(self):
+        """Obtener datos de todos los videos y subdatasets"""
+        try:
+            from utils.video_processor import VideoProcessor
+            processor = VideoProcessor("videos")  # Usar directorio por defecto
+            videos = processor.get_video_files()
+            
+            # Expandir videos para incluir subdatasets de AutoDistill
+            expanded_videos = self._expand_videos_with_subdatasets(videos)
+            
+            return expanded_videos
+        except Exception as e:
+            print(f"Error obteniendo datos de videos: {e}")
+            return []
 
     def _has_autodistill_labels(self, video_info):
         """Verificar si un video tiene etiquetas de AutoDistill"""
@@ -4666,6 +5016,442 @@ class AdvancedAnnotationSuite:
             })
         
         return options
+
+    def _setup_dataset_merge_callbacks(self):
+        """Configurar callbacks para unión de datasets"""
+        
+        # Callback para activar/desactivar modo selección múltiple
+        @self.app.callback(
+            Output('multi-select-data', 'data'),
+            [Input('multi-select-btn', 'n_clicks')],
+            [State('multi-select-data', 'data')],
+            prevent_initial_call=True
+        )
+        def toggle_multi_select(n_clicks, current_data):
+            """Alternar modo de selección múltiple"""
+            if not n_clicks:
+                return no_update
+                
+            current_data = current_data or {"active": False, "selected": []}
+            
+            # Alternar estado
+            new_state = not current_data.get("active", False)
+            
+            return {
+                "active": new_state,
+                "selected": [] if new_state else current_data.get("selected", [])
+            }
+        
+        # Callback para manejar selección de checkboxes
+        @self.app.callback(
+            Output('multi-select-data', 'data', allow_duplicate=True),
+            [Input({'type': 'dataset-checkbox', 'index': ALL}, 'value')],
+            [State('multi-select-data', 'data'),
+             State({'type': 'dataset-checkbox', 'index': ALL}, 'id')],
+            prevent_initial_call=True
+        )
+        def update_selected_datasets(checkbox_values, current_data, checkbox_ids):
+            """Actualizar datasets seleccionados"""
+            if not checkbox_values or not checkbox_ids:
+                return no_update
+                
+            current_data = current_data or {"active": False, "selected": []}
+            selected = []
+            
+            for i, (value, checkbox_id) in enumerate(zip(checkbox_values, checkbox_ids)):
+                if value:  # Si el checkbox está marcado
+                    selected.append(checkbox_id['index'])
+            
+            current_data["selected"] = selected
+            return current_data
+        
+        # Callback para actualizar texto del botón de selección múltiple
+        @self.app.callback(
+            Output('multi-select-btn', 'children'),
+            [Input('multi-select-data', 'data')]
+        )
+        def update_multi_select_button_text(multi_select_data):
+            """Actualizar texto del botón según el estado"""
+            if not multi_select_data:
+                return [html.I(className="fas fa-check-square me-2"), "Seleccionar Varios Datasets"]
+                
+            if multi_select_data.get("active", False):
+                selected_count = len(multi_select_data.get("selected", []))
+                return [
+                    html.I(className="fas fa-times me-2"), 
+                    f"Cancelar Selección ({selected_count} seleccionados)"
+                ]
+            else:
+                return [html.I(className="fas fa-check-square me-2"), "Seleccionar Varios Datasets"]
+        
+        # Callback para habilitar/deshabilitar botón de unir datasets
+        @self.app.callback(
+            Output('merge-datasets-btn', 'disabled'),
+            [Input('multi-select-data', 'data')]
+        )
+        def update_merge_button_state(multi_select_data):
+            """Habilitar botón de unir solo si hay datasets seleccionados"""
+            if not multi_select_data:
+                return True
+                
+            selected_count = len(multi_select_data.get("selected", []))
+            return selected_count < 2  # Necesita al menos 2 datasets para unir
+        
+        # Callback para abrir modal de configuración de unión
+        @self.app.callback(
+            Output('merge-datasets-modal', 'is_open'),
+            [Input('merge-datasets-btn', 'n_clicks'),
+             Input('merge-confirm-btn', 'n_clicks'),
+             Input('merge-cancel-btn', 'n_clicks')],
+            [State('merge-datasets-modal', 'is_open')],
+            prevent_initial_call=True
+        )
+        def toggle_merge_modal(merge_clicks, confirm_clicks, cancel_clicks, is_open):
+            """Abrir/cerrar modal de configuración"""
+            ctx = callback_context
+            if not ctx.triggered:
+                return no_update
+                
+            button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            
+            if button_id == 'merge-datasets-btn':
+                return True
+            elif button_id in ['merge-confirm-btn', 'merge-cancel-btn']:
+                return False
+                
+            return is_open
+        
+        # Callback para actualizar resumen en el modal
+        @self.app.callback(
+            [Output('merge-summary', 'children'),
+             Output('merge-confirm-btn', 'disabled')],
+            [Input('merge-datasets-modal', 'is_open'),
+             Input('merge-name', 'value'),
+             Input('rename-strategy', 'value')],
+            [State('multi-select-data', 'data')],
+            prevent_initial_call=True
+        )
+        def update_merge_summary(modal_open, new_name, rename_strategy, multi_select_data):
+            """Actualizar resumen de la operación de unión"""
+            if not modal_open or not multi_select_data:
+                return "", True
+                
+            selected_indices = multi_select_data.get("selected", [])
+            if not selected_indices:
+                return "No hay datasets seleccionados", True
+                
+            # Verificar si el botón debe estar habilitado
+            button_disabled = (not new_name or not new_name.strip() or len(selected_indices) < 2)
+                
+            try:
+                videos_data = self._get_videos_data()
+                selected_datasets = [videos_data[i] for i in selected_indices if i < len(videos_data)]
+                
+                # Calcular total de imágenes correctamente
+                from pathlib import Path
+                total_images = 0
+                for dataset in selected_datasets:
+                    if dataset.get('is_subdataset', False):
+                        # Para subdatasets, extraer el número de imágenes de duration
+                        duration = dataset.get('duration', '0 imágenes')
+                        try:
+                            # Extraer número de imágenes de "X imágenes, Y etiquetas"
+                            image_count = int(duration.split(' imágenes')[0])
+                            total_images += image_count
+                        except:
+                            # Si no se puede extraer, intentar contar archivos directamente
+                            images_path = Path(dataset.get('images_path', ''))
+                            if images_path.exists():
+                                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                                for ext in image_extensions:
+                                    total_images += len(list(images_path.glob(f'*{ext}')))
+                    else:
+                        # Para videos originales, usar existing_frames (imágenes ya extraídas)
+                        total_images += dataset.get('existing_frames', 0)
+                
+                dataset_names = [dataset['name'] for dataset in selected_datasets]
+                
+                summary = [
+                    html.H6("📊 Resumen de la operación:", className="text-info mb-3"),
+                    html.Ul([
+                        html.Li(f"Datasets a unir: {len(selected_datasets)}"),
+                        html.Li(f"Total de imágenes: {total_images}"),
+                        html.Li(f"Nombre del nuevo dataset: {new_name or 'Sin especificar'}"),
+                        html.Li(f"Estrategia de renombrado: {'Secuencial' if rename_strategy == 'sequential' else 'Con prefijo'}")
+                    ], className="text-muted"),
+                    html.Hr(),
+                    html.H6("📁 Datasets seleccionados:", className="text-warning mb-2"),
+                    html.Ul([
+                        html.Li(name, className="small") for name in dataset_names
+                    ], className="text-muted small")
+                ]
+                
+                return summary, button_disabled
+                
+            except Exception as e:
+                return f"Error generando resumen: {str(e)}", True
+        
+        # Callback principal para procesar la unión de datasets
+        @self.app.callback(
+            [Output('merge-progress', 'value'),
+             Output('merge-progress', 'children'),
+             Output('merge-status', 'children'),
+             Output('merge-progress-container', 'style'),
+             Output('multi-select-data', 'data', allow_duplicate=True)],
+            [Input('merge-confirm-btn', 'n_clicks')],
+            [State('merge-name', 'value'),
+             State('rename-strategy', 'value'),
+             State('merge-action', 'value'),
+             State('multi-select-data', 'data')],
+            prevent_initial_call=True
+        )
+        def process_dataset_merge(confirm_clicks, new_name, rename_strategy, action, multi_select_data):
+            """Procesar la unión de datasets"""
+            print(f"🔄 Callback activado - confirm_clicks: {confirm_clicks}")
+            print(f"🔄 new_name: {new_name}, strategy: {rename_strategy}, action: {action}")
+            print(f"🔄 multi_select_data: {multi_select_data}")
+            
+            if not confirm_clicks or not multi_select_data:
+                print("❌ Callback cancelado - sin clicks o datos")
+                return no_update, no_update, no_update, no_update, no_update
+                
+            import shutil
+            import glob
+            from pathlib import Path
+                
+            try:
+                selected_indices = multi_select_data.get("selected", [])
+                if len(selected_indices) < 2:
+                    return (0, "0%", 
+                           dbc.Alert("❌ Necesitas seleccionar al menos 2 datasets", color="danger"),
+                           {"display": "block"},
+                           multi_select_data)
+                
+                if not new_name or not new_name.strip():
+                    print("❌ Nombre del dataset vacío")
+                    return (0, "0%", 
+                           dbc.Alert("❌ Debes especificar un nombre para el nuevo dataset", color="danger"),
+                           {"display": "block"},
+                           multi_select_data)
+                
+                print(f"✅ Iniciando procesamiento de unión de datasets...")
+                print(f"📁 Nombre del nuevo dataset: {new_name}")
+                print(f"🔄 Estrategia: {rename_strategy}, Acción: {action}")
+                
+                # Obtener datos de los datasets seleccionados
+                videos_data = self._get_videos_data()
+                selected_datasets = [videos_data[i] for i in selected_indices if i < len(videos_data)]
+                
+                print(f"📊 Datasets seleccionados: {len(selected_datasets)}")
+                
+                # Crear directorio para el nuevo dataset
+                base_dataset_path = "Test_Dataset"  # Usar ruta fija en lugar de self.dataset_path
+                new_dataset_path = os.path.join(base_dataset_path, f"merged_{new_name.strip()}")
+                print(f"📁 Creando dataset en: {new_dataset_path}")
+                
+                # Si ya existe, agregar un número secuencial
+                if os.path.exists(new_dataset_path):
+                    counter = 1
+                    original_path = new_dataset_path
+                    while os.path.exists(new_dataset_path):
+                        new_dataset_path = f"{original_path}_{counter}"
+                        counter += 1
+                    print(f"📁 Dataset ya existía, usando: {new_dataset_path}")
+                
+                os.makedirs(new_dataset_path, exist_ok=True)
+                
+                from pathlib import Path
+                import shutil
+                processed_images = 0
+                
+                # Función auxiliar para generar nuevo nombre
+                def get_new_filename(original_name, dataset_index, image_index):
+                    if rename_strategy == 'sequential':
+                        return f"image_{processed_images + image_index:06d}.jpg"
+                    else:  # prefix
+                        dataset_name = selected_datasets[dataset_index]['name']
+                        dataset_prefix = dataset_name.replace('.', '_').replace(' ', '_')
+                        base_name = os.path.splitext(original_name)[0]
+                        return f"{dataset_prefix}_{base_name}.jpg"
+                
+                # Procesar cada dataset
+                for dataset_idx, dataset in enumerate(selected_datasets):
+                    print(f"🔍 Dataset {dataset_idx}: {dataset['name']}")
+                    print(f"🔍 Es subdataset: {dataset.get('is_subdataset', False)}")
+                    print(f"🔍 Datos del dataset: {dataset}")
+                    
+                    if dataset.get('is_subdataset', False):
+                        # Para subdatasets, usar images_path
+                        images_path = Path(dataset.get('images_path', ''))
+                        labels_path = Path(dataset.get('labels_path', '')) if dataset.get('labels_path') else None
+                        
+                        print(f"🔍 Images path: {images_path}")
+                        print(f"🔍 Labels path: {labels_path}")
+                        print(f"🔍 Images path existe: {images_path.exists()}")
+                        
+                        if images_path.exists():
+                            # Obtener todas las imágenes
+                            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                            image_files = []
+                            for ext in image_extensions:
+                                image_files.extend(list(images_path.glob(f'*{ext}')))
+                            
+                            for img_idx, image_file in enumerate(image_files):
+                                # Copiar/mover imagen
+                                new_filename = get_new_filename(image_file.name, dataset_idx, img_idx)
+                                new_img_path = os.path.join(new_dataset_path, new_filename)
+                                
+                                print(f"📝 DEBUG - new_dataset_path: {new_dataset_path}")
+                                print(f"📝 DEBUG - new_filename: {new_filename}")
+                                print(f"📝 DEBUG - new_img_path completo: {new_img_path}")
+                                
+                                if action == 'copy':
+                                    shutil.copy2(str(image_file), new_img_path)
+                                else:  # move
+                                    shutil.move(str(image_file), new_img_path)
+                                
+                                # Copiar/mover etiquetas si existen
+                                if labels_path and labels_path.exists():
+                                    label_file = labels_path / (image_file.stem + '.txt')
+                                    if label_file.exists():
+                                        new_label_path = os.path.splitext(new_img_path)[0] + '.txt'
+                                        if action == 'copy':
+                                            shutil.copy2(str(label_file), new_label_path)
+                                        else:  # move
+                                            shutil.move(str(label_file), new_label_path)
+                                
+                                processed_images += 1
+                    else:
+                        # Para videos originales, buscar en frames_folder
+                        frames_folder = dataset.get('frames_folder', '')
+                        if frames_folder:
+                            dataset_path = os.path.join(os.getcwd(), frames_folder)
+                        else:
+                            dataset_path = os.path.join(self.dataset_path, dataset['name'])
+                        
+                        print(f"🔍 Dataset normal path: {dataset_path}")
+                        print(f"🔍 Existe dataset normal: {os.path.exists(dataset_path)}")
+                        if os.path.exists(dataset_path):
+                            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                            total_images_found = 0
+                            for ext in image_extensions:
+                                ext_images = list(Path(dataset_path).glob(f'*{ext}'))
+                                total_images_found += len(ext_images)
+                                print(f"🔍 Imágenes {ext}: {len(ext_images)}")
+                            print(f"🔍 Total imágenes encontradas: {total_images_found}")
+                            
+                            if total_images_found > 0:
+                                print(f"🔄 Iniciando procesamiento de {total_images_found} imágenes...")
+                                
+                            for ext in image_extensions:
+                                images_with_ext = list(Path(dataset_path).glob(f'*{ext}'))
+                                print(f"🔄 Procesando {len(images_with_ext)} imágenes {ext}...")
+                                
+                                for img_idx, image_file in enumerate(images_with_ext):
+                                    print(f"📷 Procesando imagen {img_idx + 1}/{len(images_with_ext)}: {image_file.name}")
+                                    
+                                    # Copiar/mover imagen
+                                    new_filename = get_new_filename(image_file.name, dataset_idx, processed_images)
+                                    new_img_path = os.path.join(new_dataset_path, new_filename)
+                                    
+                                    print(f"📝 Operación {action}: {image_file} -> {new_img_path}")
+                                    
+                                    try:
+                                        if action == 'copy':
+                                            shutil.copy2(str(image_file), new_img_path)
+                                        else:  # move
+                                            shutil.move(str(image_file), new_img_path)
+                                        
+                                        print(f"✅ Imagen copiada exitosamente")
+                                        
+                                        # Copiar/mover etiquetas si existen
+                                        label_file = image_file.with_suffix('.txt')
+                                        if label_file.exists():
+                                            new_label_path = os.path.splitext(new_img_path)[0] + '.txt'
+                                            print(f"🏷️ Copiando etiqueta: {label_file} -> {new_label_path}")
+                                            if action == 'copy':
+                                                shutil.copy2(str(label_file), new_label_path)
+                                            else:  # move
+                                                shutil.move(str(label_file), new_label_path)
+                                            print(f"✅ Etiqueta copiada exitosamente")
+                                        
+                                        processed_images += 1
+                                        print(f"📊 Total procesadas hasta ahora: {processed_images}")
+                                        
+                                    except Exception as e:
+                                        print(f"❌ Error procesando {image_file}: {str(e)}")
+                                        continue
+                
+                # Si es mover, eliminar directorios vacíos
+                if action == 'move':
+                    for dataset in selected_datasets:
+                        if dataset.get('is_subdataset', False):
+                            # Para subdatasets, eliminar el directorio padre si está vacío
+                            images_path = Path(dataset.get('images_path', ''))
+                            labels_path = Path(dataset.get('labels_path', '')) if dataset.get('labels_path') else None
+                            
+                            try:
+                                # Intentar eliminar directorios de imágenes y etiquetas si están vacíos
+                                if images_path.exists() and not any(images_path.iterdir()):
+                                    images_path.rmdir()
+                                if labels_path and labels_path.exists() and not any(labels_path.iterdir()):
+                                    labels_path.rmdir()
+                                
+                                # Intentar eliminar el directorio padre (train/valid/test) si está vacío
+                                parent_dir = images_path.parent
+                                if parent_dir.exists() and not any(parent_dir.iterdir()):
+                                    parent_dir.rmdir()
+                            except:
+                                pass  # Ignorar errores al eliminar directorios
+                        else:
+                            # Para videos originales
+                            dataset_path = os.path.join(self.dataset_path, dataset['name'])
+                            try:
+                                if os.path.exists(dataset_path) and not os.listdir(dataset_path):
+                                    os.rmdir(dataset_path)
+                            except:
+                                pass  # Ignorar errores al eliminar directorios
+                
+                # Resetear estado de selección múltiple
+                new_multi_select_data = {"active": False, "selected": []}
+                
+                print(f"✅ COMPLETADO: Dataset '{new_name}' creado exitosamente")
+                print(f"📊 Total de imágenes procesadas: {processed_images}")
+                print(f"📁 Ubicación: {new_dataset_path}")
+                
+                success_message = dbc.Alert([
+                    html.I(className="fas fa-check-circle me-2"),
+                    f"✅ Dataset '{new_name}' creado exitosamente con {processed_images} imágenes"
+                ], color="success")
+                
+                return 100, "100%", success_message, {"display": "block"}, new_multi_select_data
+                
+            except Exception as e:
+                error_message = dbc.Alert([
+                    html.I(className="fas fa-exclamation-triangle me-2"),
+                    f"❌ Error al unir datasets: {str(e)}"
+                ], color="danger")
+                
+                return 0, "0%", error_message, {"display": "block"}, multi_select_data
+        
+        # Callback para refrescar la lista de videos después de una unión exitosa
+        @self.app.callback(
+            Output('current-page', 'data', allow_duplicate=True),
+            [Input('merge-progress', 'value')],
+            [State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def auto_refresh_after_merge(progress_value, current_page_data):
+            """Refrescar automáticamente la lista después de completar la unión"""
+            if progress_value == 100:
+                print("🔄 Auto-refrescando lista de videos después de unión exitosa...")
+                # Forzar actualización de la página actual
+                if current_page_data:
+                    import time
+                    new_data = current_page_data.copy()
+                    new_data['refresh_timestamp'] = time.time()
+                    return new_data
+            return no_update
 
 def main():
     """Función principal"""
