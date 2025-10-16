@@ -9,6 +9,7 @@ a
 
 # Ignorar directorios de datos
 videos/*
+!videos/cowboy.avi
 frames/
 dataset/
 video_camilo
