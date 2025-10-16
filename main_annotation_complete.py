@@ -762,14 +762,21 @@ class AdvancedAnnotationSuite:
                                         "Actualizar Lista"
                                     ], id="refresh-videos-btn", color="primary", 
                                      className="w-100 mb-2")
-                                ], md=3),
+                                ], md=2),
                                 dbc.Col([
                                     dbc.Button([
                                         html.I(className="fas fa-folder-open me-2"),
                                         "Abrir Carpeta Videos"
                                     ], id="open-videos-folder-btn", color="info", 
                                      className="w-100 mb-2")
-                                ], md=3),
+                                ], md=2),
+                                dbc.Col([
+                                    dbc.Button([
+                                        html.I(className="fas fa-plus me-2"),
+                                        "Agregar Videos"
+                                    ], id="add-videos-btn", color="success", 
+                                     className="w-100 mb-2")
+                                ], md=2),
                                 dbc.Col([
                                     html.Div([
                                         html.Label("Carpeta de Videos:", className="mb-1"),
@@ -786,6 +793,15 @@ class AdvancedAnnotationSuite:
                     ], className="mb-4")
                 ])
             ]),
+            
+            # Componente de carga de videos (oculto)
+            dcc.Upload(
+                id="video-upload",
+                children=[],
+                style={'display': 'none'},
+                multiple=True,
+                accept='.mp4,.avi,.mov,.mkv,.wmv,.flv,.webm,.m4v'
+            ),
             
             # Estadísticas
             dbc.Row([
@@ -2378,6 +2394,113 @@ class AdvancedAnnotationSuite:
             except Exception as e:
                 error_message = dbc.Alert(f"❌ Error: {str(e)}", color="danger")
                 return True, error_message
+
+        # Callback clientside para abrir explorador de archivos cuando se hace clic en "Agregar Videos"
+        self.app.clientside_callback(
+            """
+            function(n_clicks) {
+                if (n_clicks) {
+                    setTimeout(function() {
+                        var uploadElement = document.getElementById('video-upload').getElementsByTagName('input')[0];
+                        if (uploadElement) {
+                            uploadElement.click();
+                        }
+                    }, 100);
+                }
+                return "";
+            }
+            """,
+            Output('video-upload', 'style'),
+            [Input('add-videos-btn', 'n_clicks')],
+            prevent_initial_call=True
+        )
+
+        # Callback para procesar videos subidos
+        @self.app.callback(
+            [Output('files-toast', 'is_open', allow_duplicate=True),
+             Output('files-toast', 'children', allow_duplicate=True),
+             Output('videos-data', 'data', allow_duplicate=True)],
+            [Input('video-upload', 'contents')],
+            [State('video-upload', 'filename'),
+             State('videos-folder-path', 'value'),
+             State('current-page', 'data')],
+            prevent_initial_call=True
+        )
+        def process_uploaded_videos(contents, filenames, videos_folder, current_page):
+            """Procesar videos subidos y moverlos a la carpeta de videos"""
+            # Solo ejecutar si estamos en la página de archivos
+            if not current_page or current_page.get('page') != 'files':
+                return no_update, no_update, no_update
+                
+            if not contents or not filenames:
+                return no_update, no_update, no_update
+            
+            try:
+                import base64
+                
+                # Asegurar que la carpeta de videos existe
+                videos_folder = videos_folder or "videos"
+                os.makedirs(videos_folder, exist_ok=True)
+                
+                successful_moves = []
+                failed_moves = []
+                
+                # Procesar cada archivo
+                if not isinstance(contents, list):
+                    contents = [contents]
+                    filenames = [filenames]
+                
+                for content, filename in zip(contents, filenames):
+                    try:
+                        # Decodificar el contenido base64
+                        content_type, content_string = content.split(',')
+                        decoded = base64.b64decode(content_string)
+                        
+                        # Crear la ruta de destino
+                        dest_path = os.path.join(videos_folder, filename)
+                        
+                        # Evitar sobrescribir archivos existentes
+                        counter = 1
+                        original_dest = dest_path
+                        while os.path.exists(dest_path):
+                            name, ext = os.path.splitext(original_dest)
+                            dest_path = f"{name}_{counter}{ext}"
+                            counter += 1
+                        
+                        # Guardar el archivo
+                        with open(dest_path, 'wb') as f:
+                            f.write(decoded)
+                        
+                        successful_moves.append(filename)
+                        print(f"✅ Video guardado: {dest_path}")
+                        
+                    except Exception as e:
+                        failed_moves.append(f"{filename}: {str(e)}")
+                        print(f"❌ Error guardando {filename}: {e}")
+                
+                # Preparar mensaje de notificación
+                if successful_moves:
+                    success_msg = f"✅ {len(successful_moves)} video(s) agregado(s) exitosamente"
+                    if failed_moves:
+                        success_msg += f"\n❌ {len(failed_moves)} falló(s)"
+                    
+                    # Recargar lista de videos
+                    from utils.video_processor import VideoProcessor
+                    processor = VideoProcessor(videos_folder)
+                    updated_videos = processor.get_video_files()
+                    
+                    return True, success_msg, updated_videos
+                else:
+                    error_msg = f"❌ No se pudo agregar ningún video"
+                    if failed_moves:
+                        error_msg += f"\nErrores: {'; '.join(failed_moves[:3])}"
+                    
+                    return True, error_msg, no_update
+                    
+            except Exception as e:
+                error_msg = f"❌ Error procesando videos: {str(e)}"
+                print(f"Error en process_uploaded_videos: {e}")
+                return True, error_msg, no_update
 
     def _setup_autodistill_callbacks(self):
         """Configurar callbacks para AutoDistill"""
