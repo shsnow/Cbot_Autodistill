@@ -1,4 +1,4 @@
-/* AutoDistill Suite - Custom CSS (Versión Compatible) */
+/* AutoDistill Suite - Custom CSS (Modo Día) */
 
 /* Reset básico para asegurar visibilidad */
 * {
@@ -6,58 +6,90 @@
 }
 
 body {
-    background-color: #1a1a1a !important;
-    color: #e2e8f0 !important;
+    background-color: #ffffff !important;
+    color: #2d3748 !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
 /* Asegurar que todos los textos sean visibles */
 h1, h2, h3, h4, h5, h6, p, span, div {
-    color: #e2e8f0 !important;
+    color: #2d3748 !important;
 }
 
 .text-light, .text-white {
-    color: #f8f9fa !important;
+    color: #495057 !important;
 }
 
 .text-muted {
-    color: #adb5bd !important;
+    color: #6c757d !important;
 }
 
 /* Cards con mejor contraste */
 .card {
-    background-color: #2d3748 !important;
-    border: 1px solid #4a5568 !important;
+    background-color: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
     border-radius: 1rem !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1) !important;
 }
 
 .card-body {
-    background-color: #2d3748 !important;
+    background-color: #f8f9fa !important;
 }
 
 .card-header {
-    background-color: #1a202c !important;
-    border-bottom: 1px solid #00d4aa !important;
-    color: #e2e8f0 !important;
+    background-color: #e9ecef !important;
+    border-bottom: 1px solid #0d6efd !important;
+    color: #2d3748 !important;
 }
 
 /* Navbar */
 .navbar {
-    background-color: #1a202c !important;
-    border-bottom: 2px solid #00d4aa !important;
+    background-color: #ffffff !important;
+    border-bottom: 2px solid #0d6efd !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
 }
 
 .navbar-brand {
-    color: #00d4aa !important;
+    color: #0d6efd !important;
+    font-weight: bold !important;
 }
 
 .nav-link {
-    color: #e2e8f0 !important;
+    color: #495057 !important;
+    font-weight: 600 !important;
+    padding: 8px 16px !important;
+    margin: 0 4px !important;
+    border-radius: 6px !important;
+    transition: all 0.3s ease !important;
 }
 
 .nav-link:hover {
-    color: #00d4aa !important;
-    text-decoration: none;
+    color: #0d6efd !important;
+    text-decoration: none !important;
+    background-color: rgba(13, 110, 253, 0.1) !important;
+    transform: translateY(-1px) !important;
+}
+
+.nav-link.active {
+    color: #ffffff !important;
+    font-weight: bold !important;
+    background-color: #0d6efd !important;
+    border-radius: 6px !important;
+    box-shadow: 0 2px 4px rgba(13, 110, 253, 0.3) !important;
+}
+
+/* Asegurar que todos los elementos de navegación tengan buen contraste */
+.navbar .nav-item .nav-link {
+    color: #495057 !important;
+}
+
+.navbar .nav-item .nav-link:hover {
+    color: #0d6efd !important;
+}
+
+.navbar .nav-item .nav-link.active {
+    color: #ffffff !important;
+    background-color: #0d6efd !important;
 }
 
 /* Botones */
@@ -67,18 +99,47 @@ h1, h2, h3, h4, h5, h6, p, span, div {
 }
 
 .btn-primary {
-    background-color: #00d4aa !important;
-    border-color: #00d4aa !important;
+    background-color: #0d6efd !important;
+    border-color: #0d6efd !important;
 }
 
 .btn-info {
-    background-color: #00d4aa !important;
-    border-color: #00d4aa !important;
+    background-color: #17a2b8 !important;
+    border-color: #17a2b8 !important;
+}
+
+.btn-success {
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+}
+
+.btn-warning {
+    background-color: #ffc107 !important;
+    border-color: #ffc107 !important;
+    color: #212529 !important;
 }
 
 /* Alerts */
 .alert {
     border-radius: 1rem !important;
+}
+
+.alert-info {
+    background-color: #d1ecf1 !important;
+    border-color: #bee5eb !important;
+    color: #0c5460 !important;
+}
+
+.alert-success {
+    background-color: #d4edda !important;
+    border-color: #c3e6cb !important;
+    color: #155724 !important;
+}
+
+.alert-warning {
+    background-color: #fff3cd !important;
+    border-color: #ffeaa7 !important;
+    color: #856404 !important;
 }
 
 /* Animaciones suaves */
@@ -88,12 +149,12 @@ h1, h2, h3, h4, h5, h6, p, span, div {
 
 .hover-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 10px 25px rgba(0,212,170,0.2) !important;
+    box-shadow: 0 10px 25px rgba(13,110,253,0.2) !important;
 }
 
 /* Container principal */
 .container, .container-fluid {
-    color: #e2e8f0 !important;
+    color: #2d3748 !important;
 }
 
 /* Mejoras adicionales */
@@ -121,15 +182,47 @@ h1, h2, h3, h4, h5, h6, p, span, div {
 }
 
 ::-webkit-scrollbar-track {
-    background: #2d3748;
+    background: #f8f9fa;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #00d4aa;
+    background: #0d6efd;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #20c997;
+    background: #0b5ed7;
+}
+
+/* Inputs y formularios */
+.form-control {
+    background-color: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+    color: #2d3748 !important;
+}
+
+.form-control:focus {
+    background-color: #ffffff !important;
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.25) !important;
+    color: #2d3748 !important;
+}
+
+/* Mejoras de visibilidad para elementos específicos */
+.badge-primary {
+    background-color: #0d6efd !important;
+}
+
+.badge-success {
+    background-color: #28a745 !important;
+}
+
+.badge-info {
+    background-color: #17a2b8 !important;
+}
+
+.badge-warning {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
 }

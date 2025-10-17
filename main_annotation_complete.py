@@ -137,8 +137,8 @@ class AdvancedAnnotationSuite:
         """Crear la barra de navegación"""
         return dbc.NavbarSimple(
             children=[
-                dbc.NavItem(dbc.NavLink("🏠 Inicio", id="nav-home", href="#", active="exact")),
-                dbc.NavItem(dbc.NavLink("🏷️ Anotación", id="nav-annotation", href="#", className="active")),
+                dbc.NavItem(dbc.NavLink("🏠 Inicio", id="nav-home", href="#")),
+                dbc.NavItem(dbc.NavLink("🏷️ Anotación", id="nav-annotation", href="#")),
                 dbc.NavItem(dbc.NavLink("🏛️ Clases", id="nav-classes", href="#")),
                 dbc.NavItem(dbc.NavLink("🤖 AutoDistill", id="nav-autodistill", href="#")),
                 dbc.NavItem(dbc.NavLink("🧠 Entrenamiento", id="nav-training", href="#")),
@@ -1768,7 +1768,13 @@ class AdvancedAnnotationSuite:
         """Configurar callbacks de navegación de páginas"""
         @self.app.callback(
             [Output('page-content', 'children'),
-             Output('current-page', 'data')],
+             Output('current-page', 'data'),
+             Output('nav-home', 'className'),
+             Output('nav-annotation', 'className'),
+             Output('nav-classes', 'className'),
+             Output('nav-autodistill', 'className'),
+             Output('nav-training', 'className'),
+             Output('nav-files', 'className')],
             [Input('nav-home', 'n_clicks'),
              Input('nav-annotation', 'n_clicks'),
              Input('nav-classes', 'n_clicks'),
@@ -1781,41 +1787,69 @@ class AdvancedAnnotationSuite:
         def navigate_pages(nav_home, nav_annotation, nav_classes, nav_autodistill, nav_training, nav_files, current_page):
             """Manejar la navegación entre páginas"""
             ctx = callback_context
+            
+            # Función para obtener las clases de los botones
+            def get_nav_classes(active_page):
+                classes = ['', '', '', '', '', '']  # home, annotation, classes, autodistill, training, files
+                if active_page == 'home':
+                    classes[0] = 'active'
+                elif active_page == 'annotation':
+                    classes[1] = 'active'
+                elif active_page == 'classes':
+                    classes[2] = 'active'
+                elif active_page == 'autodistill':
+                    classes[3] = 'active'
+                elif active_page == 'training':
+                    classes[4] = 'active'
+                elif active_page == 'files':
+                    classes[5] = 'active'
+                return classes
+            
             if not ctx.triggered:
-                return self.create_home_page(), {'page': 'home'}
+                classes = get_nav_classes('home')
+                return self.create_home_page(), {'page': 'home'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
             
             # Navegación
             if button_id == 'nav-home':
-                return self.create_home_page(), {'page': 'home'}
+                classes = get_nav_classes('home')
+                return self.create_home_page(), {'page': 'home'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif button_id == 'nav-annotation':
-                return self.create_annotation_page(), {'page': 'annotation'}
+                classes = get_nav_classes('annotation')
+                return self.create_annotation_page(), {'page': 'annotation'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif button_id == 'nav-classes':
-                return self.create_classes_page(), {'page': 'classes'}
+                classes = get_nav_classes('classes')
+                return self.create_classes_page(), {'page': 'classes'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif button_id == 'nav-autodistill':
-                return self.create_autodistill_page(), {'page': 'autodistill'}
+                classes = get_nav_classes('autodistill')
+                return self.create_autodistill_page(), {'page': 'autodistill'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif button_id == 'nav-training':
-                return self.create_training_page(), {'page': 'training'}
+                classes = get_nav_classes('training')
+                return self.create_training_page(), {'page': 'training'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif button_id == 'nav-files':
-                return self.create_files_page(), {'page': 'files'}
+                classes = get_nav_classes('files')
+                return self.create_files_page(), {'page': 'files'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             
             # Por defecto, mantener la página actual
             current_page = current_page or {'page': 'home'}
+            classes = get_nav_classes(current_page['page'])
+            
             if current_page['page'] == 'home':
-                return self.create_home_page(), current_page
+                return self.create_home_page(), current_page, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif current_page['page'] == 'annotation':
-                return self.create_annotation_page(), current_page
+                return self.create_annotation_page(), current_page, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif current_page['page'] == 'classes':
-                return self.create_classes_page(), current_page
+                return self.create_classes_page(), current_page, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif current_page['page'] == 'autodistill':
-                return self.create_autodistill_page(), current_page
+                return self.create_autodistill_page(), current_page, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif current_page['page'] == 'training':
-                return self.create_training_page(), current_page
+                return self.create_training_page(), current_page, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             elif current_page['page'] == 'files':
-                return self.create_files_page(), current_page
+                return self.create_files_page(), current_page, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             else:
-                return self.create_home_page(), {'page': 'home'}
+                classes = get_nav_classes('home')
+                return self.create_home_page(), {'page': 'home'}, classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
         
         # Callback separado para el botón back-home (solo se activa cuando existe)
         @self.app.callback(
