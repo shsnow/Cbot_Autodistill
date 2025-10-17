@@ -4345,18 +4345,20 @@ class AdvancedAnnotationSuite:
                         ], color="secondary", className="mb-2")
                 else:
                     # Para videos originales
+                    # Definir labels_path primero
+                    labels_path = Path('output') / video['name_without_ext'] / 'labels'
+                    
                     # Verificar si tiene etiquetas de AutoDistill usando la información del video
                     has_autodistill_labels = (video.get('has_autodistill_labels', False) or 
                                             video.get('dataset_type') == 'autodistill')
                     
                     if not has_autodistill_labels:
                         # Verificación adicional por si no se detectó antes
-                        labels_path = Path('output') / video['name_without_ext'] / 'labels'
                         has_autodistill_labels = labels_path.exists() and any(labels_path.glob("*.txt"))
                     
                     if has_autodistill_labels:
                         # Si tiene etiquetas de AutoDistill
-                        label_count = len(list(labels_path.glob("*.txt")))
+                        label_count = len(list(labels_path.glob("*.txt"))) if labels_path.exists() else 0
                         action_buttons = dbc.ButtonGroup([
                             dbc.Button([
                                 html.I(className="fas fa-eye me-2"),
@@ -4429,7 +4431,7 @@ class AdvancedAnnotationSuite:
                     ], className="text-muted d-block"),
                     html.Small([
                         html.I(className="fas fa-film me-1"),
-                        f"{video.get('frame_count', 0)} frames"
+                        f"{video.get('existing_frames', video.get('frame_count', 0))} frames extraídos"
                     ], className="text-muted d-block")
                 ], className="mb-2"),
                 
@@ -4482,16 +4484,27 @@ class AdvancedAnnotationSuite:
         from pathlib import Path
         
         count = 0
+        print(f"🔢 Contando etiquetas AutoDistill para {len(videos)} elementos...")
+        
         for video in videos:
+            video_name = video.get('name', 'Sin nombre')
             if video.get('is_subdataset'):
-                # Para subdatasets, verificar si tiene etiquetas
-                if video.get('has_labels', False):
+                # Para subdatasets de AutoDistill, verificar si tiene etiquetas
+                if video.get('dataset_type') == 'autodistill' and video.get('has_labels', False):
                     count += 1
+                    print(f"✅ Contado subdataset AutoDistill: {video_name}")
+            elif video.get('has_autodistill_labels', False):
+                # Para videos originales que tienen etiquetas de AutoDistill
+                count += 1
+                print(f"✅ Contado video original con etiquetas: {video_name}")
             elif video.get('has_frames', False):
-                # Para videos originales, verificar AutoDistill
+                # Para videos originales, verificar si tienen etiquetas de AutoDistill
                 labels_path = Path('output') / video['name_without_ext'] / 'labels'
                 if labels_path.exists() and any(labels_path.glob("*.txt")):
                     count += 1
+                    print(f"✅ Contado video con etiquetas en output: {video_name}")
+        
+        print(f"🔢 Total contado: {count}")
         return count
 
     def _expand_videos_with_subdatasets(self, videos):
