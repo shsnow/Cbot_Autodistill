@@ -31,6 +31,9 @@ app = dash.Dash(
     suppress_callback_exceptions=True
 )
 
+# Configurar límites para archivos grandes (hasta 1GB)
+app.server.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024 * 1024  # 1GB en bytes
+
 app.title = "Cbot Suite - Herramienta de Anotación Completa"
 
 class AdvancedAnnotationSuite:
@@ -41,10 +44,14 @@ class AdvancedAnnotationSuite:
         os.makedirs('output', exist_ok=True)
         
         # Configurar dataset por defecto
-        self.dataset_path = "Test_Dataset"
+        # Cambia esta ruta por la de tu dataset
+        self.dataset_path = "Test_Dataset"  # Cambia esto por: "Mi_Dataset" o la ruta de tu dataset
         self.classes_yaml = "data.yaml"
         self.images_path = os.path.join(self.dataset_path)  # Las imágenes están directamente en el directorio
         self.labels_path = os.path.join(self.dataset_path, "labels")
+        
+        print(f"📁 Usando dataset: {self.dataset_path}")
+        print(f"📄 Archivo de clases: {self.classes_yaml}")
         
         # Crear directorio de labels si no existe
         if not os.path.exists(self.labels_path):
@@ -776,7 +783,9 @@ class AdvancedAnnotationSuite:
                                         html.I(className="fas fa-plus me-2"),
                                         "Agregar Videos"
                                     ], id="add-videos-btn", color="success", 
-                                     className="w-100 mb-2")
+                                     className="w-100 mb-2"),
+                                    html.Small("⚠️ Límite: ~500MB por archivo", 
+                                             className="text-muted d-block text-center")
                                 ], md=2),
                                 dbc.Col([
                                     dbc.Button([
@@ -2165,11 +2174,12 @@ class AdvancedAnnotationSuite:
             [Input('refresh-videos-btn', 'n_clicks'),
              Input('videos-folder-path', 'value'),
              Input('processing-status', 'data'),
-             Input('multi-select-data', 'data')],
+             Input('multi-select-data', 'data'),
+             Input('videos-refresh', 'data')],
             [State('current-page', 'data')],
             prevent_initial_call=True
         )
-        def load_videos(refresh_clicks, videos_folder, processing_status, multi_select_data, current_page):
+        def load_videos(refresh_clicks, videos_folder, processing_status, multi_select_data, videos_refresh, current_page):
             """Cargar lista de videos de la carpeta"""
             # Solo ejecutar si estamos en la página de archivos
             if current_page and current_page.get('page') != 'files':
@@ -2596,7 +2606,7 @@ class AdvancedAnnotationSuite:
         @self.app.callback(
             [Output('files-toast', 'is_open', allow_duplicate=True),
              Output('files-toast', 'children', allow_duplicate=True),
-             Output('videos-data', 'data', allow_duplicate=True)],
+             Output('videos-refresh', 'data', allow_duplicate=True)],
             [Input('video-upload', 'contents')],
             [State('video-upload', 'filename'),
              State('videos-folder-path', 'value'),
@@ -2605,12 +2615,28 @@ class AdvancedAnnotationSuite:
         )
         def process_uploaded_videos(contents, filenames, videos_folder, current_page):
             """Procesar videos subidos y moverlos a la carpeta de videos"""
+            print(f"🔄 Callback process_uploaded_videos ejecutado. contents: {len(contents) if contents else 0}, filenames: {filenames}")
+            
             # Solo ejecutar si estamos en la página de archivos
             if not current_page or current_page.get('page') != 'files':
+                print("❌ No estamos en la página de archivos")
                 return no_update, no_update, no_update
                 
             if not contents or not filenames:
+                print("❌ No hay contenido o nombres de archivo")
                 return no_update, no_update, no_update
+            
+            # Verificar si algún contenido está vacío (problema de archivos grandes)
+            if isinstance(contents, list):
+                for i, content in enumerate(contents):
+                    if not content or len(content) < 100:  # Un archivo válido base64 debe tener al menos 100 caracteres
+                        filename = filenames[i] if isinstance(filenames, list) else filenames
+                        print(f"❌ Archivo {filename} parece estar vacío o corrupto (tamaño: {len(content) if content else 0})")
+                        return True, f"❌ El archivo {filename} está vacío o es demasiado grande. Los archivos de video muy grandes (>500MB) pueden fallar debido a limitaciones del navegador.", no_update
+            else:
+                if not contents or len(contents) < 100:
+                    print(f"❌ Archivo {filenames} parece estar vacío o corrupto")
+                    return True, f"❌ El archivo {filenames} está vacío o es demasiado grande. Los archivos de video muy grandes (>500MB) pueden fallar debido a limitaciones del navegador.", no_update
             
             try:
                 import base64
@@ -2629,9 +2655,27 @@ class AdvancedAnnotationSuite:
                 
                 for content, filename in zip(contents, filenames):
                     try:
+                        print(f"🔄 Procesando archivo: {filename}")
+                        print(f"📏 Tamaño del contenido: {len(content) if content else 0} caracteres")
+                        
                         # Decodificar el contenido base64
-                        content_type, content_string = content.split(',')
+                        if ',' in content:
+                            content_type, content_string = content.split(',', 1)
+                            print(f"📋 Tipo de contenido: {content_type}")
+                        else:
+                            # Si no hay coma, asumir que todo el contenido es base64
+                            content_string = content
+                            print("📋 No se encontró tipo de contenido, usando contenido completo")
+                        
+                        print(f"🔢 Tamaño de content_string: {len(content_string)} caracteres")
+                        
+                        if not content_string or len(content_string) < 100:
+                            print(f"⚠️ Contenido muy pequeño o vacío para {filename}")
+                            failed_moves.append(f"{filename}: Contenido vacío o muy pequeño")
+                            continue
+                            
                         decoded = base64.b64decode(content_string)
+                        print(f"✅ Decodificado exitoso: {len(decoded)} bytes")
                         
                         # Crear la ruta de destino
                         dest_path = os.path.join(videos_folder, filename)
@@ -2664,20 +2708,32 @@ class AdvancedAnnotationSuite:
                     # Recargar lista de videos
                     from utils.video_processor import VideoProcessor
                     processor = VideoProcessor(videos_folder)
-                    updated_videos = processor.get_video_files()
+                    videos = processor.get_video_files()
                     
-                    return True, success_msg, updated_videos
+                    # Expandir videos para incluir subdatasets de AutoDistill
+                    updated_videos = self._expand_videos_with_subdatasets(videos)
+                    
+                    # Incrementar videos-refresh para forzar actualización
+                    import time
+                    refresh_value = int(time.time())
+                    
+                    return True, success_msg, refresh_value
                 else:
                     error_msg = f"❌ No se pudo agregar ningún video"
                     if failed_moves:
                         error_msg += f"\nErrores: {'; '.join(failed_moves[:3])}"
                     
-                    return True, error_msg, no_update
+                    # También incrementar refresh para forzar actualización aunque haya errores
+                    import time
+                    refresh_value = int(time.time())
+                    return True, error_msg, refresh_value
                     
             except Exception as e:
                 error_msg = f"❌ Error procesando videos: {str(e)}"
                 print(f"Error en process_uploaded_videos: {e}")
-                return True, error_msg, no_update
+                import time
+                refresh_value = int(time.time())
+                return True, error_msg, refresh_value
 
     def _setup_autodistill_callbacks(self):
         """Configurar callbacks para AutoDistill"""
@@ -4796,6 +4852,14 @@ class AdvancedAnnotationSuite:
     def _run_autodistill_process(self, dataset_path, base_model, classes, confidence_threshold, iou_threshold):
         """Ejecutar proceso real de AutoDistill"""
         try:
+            # Configurar PyTorch para evitar errores de deterministic algorithms
+            import torch
+            if torch.cuda.is_available():
+                # Desactivar algoritmos determinísticos para evitar errores con CUDA kernels
+                torch.use_deterministic_algorithms(False)
+                # O alternativamente, usar warn_only para permitir operaciones no determinísticas
+                # torch.use_deterministic_algorithms(True, warn_only=True)
+            
             from autodistill.detection import CaptionOntology
             from autodistill_grounding_dino import GroundingDINO
             from autodistill_yolov8 import YOLOv8
