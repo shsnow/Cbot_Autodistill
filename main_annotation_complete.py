@@ -43,6 +43,10 @@ class AdvancedAnnotationSuite:
         # Crear carpeta output si no existe
         os.makedirs('output', exist_ok=True)
         
+        # 🎯 Crear carpeta Models para transfer learning
+        os.makedirs('Models', exist_ok=True)
+        print(f"📁 Carpeta Models lista para modelos personalizados")
+        
         # Configurar dataset por defecto
         # Cambia esta ruta por la de tu dataset
         self.dataset_path = "Test_Dataset"  # Cambia esto por: "Mi_Dataset" o la ruta de tu dataset
@@ -1348,6 +1352,25 @@ class AdvancedAnnotationSuite:
                             ], className="mb-0")
                         ]),
                         dbc.CardBody([
+                            # 🎯 Selector de Transfer Learning
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label([
+                                        html.I(className="fas fa-brain me-2"),
+                                        "Transfer Learning (Modelo Personalizado):"
+                                    ], className="fw-bold mb-2"),
+                                    dbc.Select(
+                                        id="transfer-learning-model",
+                                        options=[{"label": "Ninguno (Entrenamiento desde cero)", "value": "none"}],
+                                        value="none",
+                                        className="mb-3"
+                                    ),
+                                    html.Small([
+                                        html.I(className="fas fa-info-circle me-1"),
+                                        "Modelos personalizados desde carpeta Models/"
+                                    ], className="text-muted d-block mb-3")
+                                ], md=12)
+                            ]),
                             dbc.Row([
                                 dbc.Col([
                                     html.Label("Modelo Base:", className="fw-bold mb-2"),
@@ -2753,54 +2776,68 @@ class AdvancedAnnotationSuite:
             
             try:
                 options = []
-                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.JPG', '.JPEG', '.PNG', '.BMP']
+                
+                print(f"🔍 Buscando datasets para AutoDistill en carpeta 'output'...")
                 
                 # Buscar en carpeta output (datasets de videos procesados)
                 output_path = Path('output')
                 if output_path.exists():
                     for folder in output_path.iterdir():
                         if folder.is_dir():
-                            # Verificar que la carpeta contiene imágenes
-                            has_images = any(
-                                any(folder.glob(f'*{ext}')) for ext in image_extensions
-                            )
+                            print(f"📁 Revisando carpeta: {folder.name}")
+                            
+                            # Buscar imágenes (más flexible)
+                            image_files = []
+                            for ext in image_extensions:
+                                image_files.extend(list(folder.glob(f'*{ext}')))
+                            
+                            has_images = len(image_files) > 0
                             
                             if has_images:
-                                # Contar imágenes
-                                image_count = sum(
-                                    len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
-                                )
+                                image_count = len(image_files)
+                                print(f"   ✅ {folder.name}: {image_count} imágenes")
                                 
                                 options.append({
                                     'label': f"📹 {folder.name} ({image_count} imágenes)",
                                     'value': str(folder)
                                 })
+                            else:
+                                print(f"   ❌ {folder.name}: Sin imágenes")
                 
                 # Buscar en carpeta Merged (datasets unidos)
+                print(f"🔍 Buscando datasets en carpeta 'Merged'...")
                 merged_path = Path('Merged')
                 if merged_path.exists():
                     for folder in merged_path.iterdir():
                         if folder.is_dir():
-                            # Verificar que la carpeta contiene imágenes
-                            has_images = any(
-                                any(folder.glob(f'*{ext}')) for ext in image_extensions
-                            )
+                            print(f"📁 Revisando carpeta: {folder.name}")
+                            
+                            # Buscar imágenes (más flexible)
+                            image_files = []
+                            for ext in image_extensions:
+                                image_files.extend(list(folder.glob(f'*{ext}')))
+                            
+                            has_images = len(image_files) > 0
                             
                             if has_images:
-                                # Contar imágenes
-                                image_count = sum(
-                                    len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
-                                )
+                                image_count = len(image_files)
+                                print(f"   ✅ {folder.name}: {image_count} imágenes")
                                 
                                 options.append({
                                     'label': f"🔗 {folder.name} ({image_count} imágenes) - Dataset Unido",
                                     'value': str(folder)
                                 })
+                            else:
+                                print(f"   ❌ {folder.name}: Sin imágenes")
                 
+                print(f"✅ Total de datasets encontrados para AutoDistill: {len(options)}")
                 return sorted(options, key=lambda x: x['label'])
                 
             except Exception as e:
-                print(f"Error cargando datasets: {e}")
+                print(f"❌ Error cargando datasets: {e}")
+                import traceback
+                traceback.print_exc()
                 return []
         
         # Callback para ejecutar AutoDistill
@@ -3480,29 +3517,40 @@ class AdvancedAnnotationSuite:
             Output('training-dataset-selector', 'options'),
             [Input('current-page', 'data'),
              Input('refresh-training-datasets-btn', 'n_clicks')],
-            prevent_initial_call=True
+            prevent_initial_call=False  # ✅ Permitir ejecución inicial
         )
         def load_training_datasets(current_page, refresh_clicks):
             """Cargar datasets disponibles para entrenamiento"""
-            if not current_page or current_page.get('page') != 'training':
+            # ✅ Ejecutar siempre cuando estamos en training o al inicio
+            if current_page and current_page.get('page') not in ['training', None]:
                 return no_update
             
             try:
                 options = []
+                print(f"🔍 Buscando datasets en carpeta 'output'...")
                 
                 # 1. Buscar en carpeta 'output' (datasets procesados)
                 output_path = Path('output')
                 if output_path.exists():
                     for folder in output_path.iterdir():
                         if folder.is_dir():
+                            print(f"📁 Revisando carpeta: {folder.name}")
+                            
                             # Verificar que la carpeta contiene imágenes y etiquetas
-                            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
-                            has_images = any(
-                                any(folder.glob(f'*{ext}')) for ext in image_extensions
-                            )
+                            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.JPG', '.JPEG', '.PNG', '.BMP']
+                            
+                            # Buscar imágenes (más flexible - busca en la carpeta principal)
+                            image_files = []
+                            for ext in image_extensions:
+                                image_files.extend(list(folder.glob(f'*{ext}')))
+                            
+                            has_images = len(image_files) > 0
+                            print(f"   📷 Imágenes encontradas: {len(image_files)}")
                             
                             labels_path = folder / 'labels'
-                            has_labels = labels_path.exists() and any(labels_path.glob('*.txt'))
+                            label_files = list(labels_path.glob('*.txt')) if labels_path.exists() else []
+                            has_labels = len(label_files) > 0
+                            print(f"   🏷️ Etiquetas encontradas: {len(label_files)}")
                             
                             # Verificar si ya está dividido en train/valid
                             train_path = folder / 'train'
@@ -3531,15 +3579,20 @@ class AdvancedAnnotationSuite:
                             
                             elif has_images and has_labels:
                                 # Dataset sin dividir - contar imágenes y etiquetas
-                                image_count = sum(
-                                    len(list(folder.glob(f'*{ext}'))) for ext in image_extensions
-                                )
-                                label_count = len(list(labels_path.glob('*.txt')))
+                                image_count = len(image_files)
+                                label_count = len(label_files)
+                                
+                                print(f"   ✅ Dataset válido: {folder.name} - {image_count} imgs, {label_count} labels")
                                 
                                 options.append({
                                     'label': f"📂 {folder.name} ({image_count} imágenes, {label_count} etiquetas)",
                                     'value': str(folder)
                                 })
+                            elif has_images:
+                                # Dataset con imágenes pero sin etiquetas
+                                print(f"   ⚠️ {folder.name} tiene imágenes pero NO tiene etiquetas")
+                            else:
+                                print(f"   ❌ {folder.name} NO tiene imágenes")
                 
                 # 2. Buscar datasets unidos en 'Merged'
                 merged_path = Path('Merged')
@@ -3586,11 +3639,65 @@ class AdvancedAnnotationSuite:
                                         'value': str(dataset_folder)
                                     })
                 
+                print(f"✅ Total de datasets encontrados: {len(options)}")
+                if len(options) == 0:
+                    print("⚠️ No se encontraron datasets. Verifica que:")
+                    print("   1. Las carpetas estén en 'output/' o 'Merged/'")
+                    print("   2. Las carpetas contengan imágenes (.jpg, .png, etc.)")
+                    print("   3. Exista una carpeta 'labels/' con archivos .txt")
+                
                 return sorted(options, key=lambda x: x['label'])
                 
             except Exception as e:
-                print(f"Error cargando datasets para entrenamiento: {e}")
+                print(f"❌ Error cargando datasets para entrenamiento: {e}")
+                import traceback
+                traceback.print_exc()
                 return []
+        
+        # 🎯 Callback para cargar modelos personalizados desde carpeta Models/
+        @self.app.callback(
+            Output('transfer-learning-model', 'options'),
+            [Input('current-page', 'data'),
+             Input('refresh-training-datasets-btn', 'n_clicks')],
+            prevent_initial_call=False
+        )
+        def load_custom_models(current_page, refresh_clicks):
+            """Cargar modelos personalizados desde carpeta Models/"""
+            if current_page and current_page.get('page') not in ['training', None]:
+                return no_update
+            
+            try:
+                models_path = Path('Models')
+                options = [{"label": "🆕 Ninguno (Entrenamiento desde cero)", "value": "none"}]
+                
+                if models_path.exists():
+                    print(f"🔍 Buscando modelos personalizados en 'Models/'...")
+                    
+                    # Buscar archivos .pt (PyTorch/YOLO models)
+                    model_files = list(models_path.glob('*.pt'))
+                    
+                    for model_file in sorted(model_files):
+                        # Obtener tamaño del archivo
+                        size_mb = model_file.stat().st_size / (1024 * 1024)
+                        options.append({
+                            'label': f"🧠 {model_file.name} ({size_mb:.1f} MB)",
+                            'value': str(model_file)
+                        })
+                        print(f"   ✅ Modelo encontrado: {model_file.name} ({size_mb:.1f} MB)")
+                    
+                    if len(model_files) == 0:
+                        print("   ℹ️ No se encontraron modelos .pt en Models/")
+                else:
+                    print("   ℹ️ Carpeta Models/ no existe, creando...")
+                    models_path.mkdir(exist_ok=True)
+                
+                return options
+                
+            except Exception as e:
+                print(f"❌ Error cargando modelos personalizados: {e}")
+                import traceback
+                traceback.print_exc()
+                return [{"label": "🆕 Ninguno (Entrenamiento desde cero)", "value": "none"}]
         
         # Callback para mostrar información del dataset seleccionado
         @self.app.callback(
@@ -3610,21 +3717,47 @@ class AdvancedAnnotationSuite:
                 if not path.exists():
                     return dbc.Alert("❌ Dataset no encontrado", color="danger"), True, True
                 
-                # Contar archivos
-                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
-                image_count = sum(
-                    len(list(path.glob(f'*{ext}'))) for ext in image_extensions
-                )
-                
-                # Verificar etiquetas
-                labels_path = path / 'labels'
-                has_labels = labels_path.exists() and any(labels_path.glob('*.txt'))
-                label_count = len(list(labels_path.glob('*.txt'))) if has_labels else 0
+                print(f"🔍 Actualizando info de dataset: {dataset_path}")
                 
                 # Verificar si ya está dividido
                 train_path = path / 'train'
                 val_path = path / 'valid'
                 is_split = train_path.exists() and val_path.exists()
+                
+                # Contar archivos según estructura
+                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.JPG', '.JPEG', '.PNG', '.BMP']
+                
+                if is_split:
+                    # Dataset dividido: contar en train/
+                    train_images_path = train_path / 'images' if (train_path / 'images').exists() else train_path
+                    image_count = sum(
+                        len(list(train_images_path.glob(f'*{ext}'))) for ext in image_extensions
+                    )
+                    
+                    # Verificar etiquetas en train/labels/
+                    train_labels_path = train_path / 'labels'
+                    has_labels = train_labels_path.exists() and any(train_labels_path.glob('*.txt'))
+                    label_count = len(list(train_labels_path.glob('*.txt'))) if has_labels else 0
+                else:
+                    # Dataset sin dividir: contar en raíz
+                    image_count = sum(
+                        len(list(path.glob(f'*{ext}'))) for ext in image_extensions
+                    )
+                    
+                    # 🔍 Verificar etiquetas en AMBOS lugares (raíz Y labels/)
+                    labels_in_root = list(path.glob('*.txt'))
+                    labels_path = path / 'labels'
+                    labels_in_subfolder = list(labels_path.glob('*.txt')) if labels_path.exists() else []
+                    
+                    # Contar total de etiquetas
+                    all_labels = labels_in_root + labels_in_subfolder
+                    label_count = len(all_labels)
+                    has_labels = label_count > 0
+                    
+                    print(f"   🏷️ Etiquetas en raíz: {len(labels_in_root)}")
+                    print(f"   🏷️ Etiquetas en labels/: {len(labels_in_subfolder)}")
+                
+                print(f"   📊 is_split: {is_split}, images: {image_count}, labels: {label_count}")
                 
                 # Calcular tamaño
                 total_size = sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
@@ -3656,6 +3789,9 @@ class AdvancedAnnotationSuite:
                 # El botón de entrenar se habilita si está dividido o se puede dividir
                 can_split = not is_split and image_count > 0 and label_count > 0
                 can_train = is_split or (image_count > 0 and label_count > 0)
+                
+                print(f"✅ Dataset válido - can_split: {can_split}, can_train: {can_train}")
+                print(f"   Botón entrenar habilitado: {can_train}")
                 
                 return info, not can_split, not can_train
                 
@@ -3838,11 +3974,12 @@ class AdvancedAnnotationSuite:
              State('training-lr', 'value'),
              State('training-img-size', 'value'),
              State('training-patience', 'value'),
+             State('transfer-learning-model', 'value'),  # 🎯 Modelo de transfer learning
              State('current-page', 'data')],
             prevent_initial_call=True
         )
         def start_training(start_clicks, stop_clicks, dataset_path, classes_source, epochs, batch_size, 
-                          learning_rate, image_size, patience, current_page):
+                          learning_rate, image_size, patience, transfer_model, current_page):
             """Iniciar o detener el entrenamiento del modelo"""
             if not current_page or current_page.get('page') != 'training':
                 return no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update
@@ -3887,7 +4024,8 @@ class AdvancedAnnotationSuite:
                     # Deshabilitar botón de inicio mientras entrena
                     result = self._start_real_training(
                         dataset_path, epochs, batch_size, learning_rate, 
-                        image_size, patience, len(train_images), len(train_labels)
+                        image_size, patience, len(train_images), len(train_labels),
+                        transfer_model  # 🎯 Pasar modelo de transfer learning
                     )
                     # Forzar deshabilitado del botón de inicio
                     if isinstance(result, tuple) and len(result) == 8:
@@ -4135,7 +4273,8 @@ class AdvancedAnnotationSuite:
         return max_class_idx
 
     def _start_real_training(self, dataset_path, epochs, batch_size, learning_rate, 
-                           image_size, patience, train_images_count, train_labels_count):
+                           image_size, patience, train_images_count, train_labels_count, 
+                           transfer_model='none'):
         """Iniciar entrenamiento real con YOLOv8"""
         try:
             import threading
@@ -4175,7 +4314,14 @@ class AdvancedAnnotationSuite:
             with open(data_yaml_path, 'w') as f:
                 yaml.dump(data_config, f)
             
-            print(f"🚀 Iniciando entrenamiento con YOLOv8...")
+            # 🎯 Mostrar información de Transfer Learning
+            if transfer_model and transfer_model != 'none':
+                print(f"🚀 Iniciando Transfer Learning con YOLOv8...")
+                print(f"🧠 Modelo base: {transfer_model}")
+            else:
+                print(f"🚀 Iniciando entrenamiento desde cero con YOLOv8...")
+                print(f"🆕 Modelo base: yolov8n.pt (preentrenado COCO)")
+            
             print(f"📁 Dataset: {dataset_path}")
             print(f"🖼️ Imágenes de entrenamiento: {train_images_path}")
             print(f"🖼️ Imágenes de validación: {valid_images_path}")
@@ -4235,8 +4381,18 @@ class AdvancedAnnotationSuite:
                     original_cwd = os.getcwd()
                     os.chdir(dataset_path)
                     
-                    # Cargar modelo base
-                    model = YOLO(original_cwd + '/yolov8n.pt')
+                    # 🎯 Determinar qué modelo usar
+                    if transfer_model and transfer_model != 'none':
+                        # Transfer Learning: usar modelo personalizado
+                        model_path = os.path.join(original_cwd, transfer_model)
+                        print(f"🧠 Transfer Learning: Cargando modelo personalizado desde {model_path}")
+                        model = YOLO(model_path)
+                        print(f"✅ Modelo personalizado cargado exitosamente")
+                    else:
+                        # Entrenamiento desde cero: usar modelo base YOLOv8
+                        model_path = original_cwd + '/yolov8n.pt'
+                        print(f"🆕 Entrenamiento desde cero con modelo base: {model_path}")
+                        model = YOLO(model_path)
                     
                     self.training_progress.update({
                         'progress': 10,
@@ -4420,8 +4576,44 @@ class AdvancedAnnotationSuite:
                             html.I(className="fas fa-layer-group me-1"),
                             f"Dataset Unido - {video.get('label_count', 0)} etiquetas"
                         ], color="warning", className="mb-2")
+                    elif dataset_type == 'simple':
+                        # Dataset simple (carpeta con imágenes y labels)
+                        label_count = video.get('label_count', 0)
+                        print(f"📦 Dataset simple: {video['name']} con {label_count} etiquetas")
+                        
+                        if label_count > 0:
+                            # Dataset simple con etiquetas
+                            action_buttons = dbc.ButtonGroup([
+                                dbc.Button([
+                                    html.I(className="fas fa-tags me-2"),
+                                    "Revisar Etiquetas"
+                                ], id={'type': 'review-btn', 'index': idx}, 
+                                 color="primary", size="sm"),
+                                dbc.Button([
+                                    html.I(className="fas fa-robot me-2"),
+                                    "AutoDistill"
+                                ], id={'type': 'autodistill-btn', 'index': idx}, 
+                                 color="success", size="sm")
+                            ], className="w-100")
+                            
+                            status_badge = dbc.Badge([
+                                html.I(className="fas fa-tags me-1"),
+                                f"{label_count} etiquetados"
+                            ], color="success", className="mb-2")
+                        else:
+                            # Dataset simple solo con imágenes
+                            action_buttons = dbc.Button([
+                                html.I(className="fas fa-images me-2"),
+                                "Ver Imágenes"
+                            ], id={'type': 'review-btn', 'index': idx}, 
+                             color="secondary", size="sm", className="w-100")
+                            
+                            status_badge = dbc.Badge([
+                                html.I(className="fas fa-images me-1"),
+                                "Solo imágenes"
+                            ], color="secondary", className="mb-2")
                     else:
-                        # Subdataset solo con imágenes
+                        # Subdataset solo con imágenes (otros tipos)
                         print(f"⚠️ Dataset {video['name']} clasificado como 'solo imágenes': dataset_type={dataset_type}")
                         action_buttons = dbc.Button([
                             html.I(className="fas fa-images me-2"),
@@ -4665,6 +4857,74 @@ class AdvancedAnnotationSuite:
                                 'subdataset_type': subdir  # Mantener info de si es train/valid
                             }
                             expanded_videos.append(subdataset)
+        
+        # 🔍 Buscar datasets simples en output/ (carpetas con imágenes y labels directamente)
+        output_path = Path('output')
+        if output_path.exists():
+            print(f"🔍 Buscando datasets simples en 'output'...")
+            # Obtener nombres de videos ya procesados para evitar duplicados
+            processed_video_names = {video['name_without_ext'] for video in videos}
+            
+            for folder in output_path.iterdir():
+                if not folder.is_dir():
+                    continue
+                    
+                # Saltar carpetas especiales y carpetas que ya fueron procesadas como videos
+                if folder.name in ['__pycache__', '.git', 'runs', 'weights'] or folder.name in processed_video_names:
+                    continue
+                
+                # Saltar carpetas que tienen estructura train/valid/test (ya procesadas arriba)
+                if (folder / 'train').exists() or (folder / 'valid').exists():
+                    continue
+                
+                print(f"   📁 Revisando carpeta simple: {folder.name}")
+                
+                # Buscar imágenes en la raíz de la carpeta
+                image_extensions = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.bmp', '.BMP']
+                image_files = []
+                for ext in image_extensions:
+                    image_files.extend(list(folder.glob(f'*{ext}')))
+                
+                image_count = len(image_files)
+                print(f"      📷 Imágenes: {image_count}")
+                
+                # Buscar etiquetas en subcarpeta labels/
+                labels_path = folder / 'labels'
+                label_count = 0
+                has_labels = False
+                
+                if labels_path.exists() and labels_path.is_dir():
+                    label_files = list(labels_path.glob('*.txt'))
+                    label_count = len(label_files)
+                    has_labels = label_count > 0
+                    print(f"      🏷️ Etiquetas: {label_count}")
+                
+                # Solo agregar si tiene imágenes
+                if image_count > 0:
+                    print(f"   ✅ Dataset simple válido: {folder.name}")
+                    simple_dataset = {
+                        'name': folder.name,
+                        'name_without_ext': folder.name,
+                        'path': str(folder),
+                        'images_path': str(folder),
+                        'labels_path': str(labels_path) if has_labels else None,
+                        'size': 'N/A',
+                        'duration': f"{image_count} imágenes, {label_count} etiquetas",
+                        'duration_str': f"{image_count} imágenes",
+                        'frame_count': image_count,
+                        'existing_frames': image_count,
+                        'file_size_str': 'Dataset',
+                        'resolution': 'Múltiples',
+                        'has_frames': True,
+                        'has_labels': has_labels,
+                        'label_count': label_count,
+                        'is_subdataset': True,
+                        'parent_video': 'simple_dataset',
+                        'dataset_type': 'simple'
+                    }
+                    expanded_videos.append(simple_dataset)
+                else:
+                    print(f"   ❌ NO tiene imágenes: {folder.name}")
         
         # Buscar datasets unidos en Merged
         merged_path = Path('Merged')
@@ -5373,6 +5633,11 @@ class AdvancedAnnotationSuite:
                 
                 os.makedirs(new_dataset_path, exist_ok=True)
                 
+                # 🏷️ Crear carpeta labels/ para mantener estructura YOLO
+                labels_folder = os.path.join(new_dataset_path, 'labels')
+                os.makedirs(labels_folder, exist_ok=True)
+                print(f"📁 Carpeta de etiquetas creada: {labels_folder}")
+                
                 from pathlib import Path
                 import shutil
                 processed_images = 0
@@ -5414,24 +5679,25 @@ class AdvancedAnnotationSuite:
                                 new_filename = get_new_filename(image_file.name, dataset_idx, img_idx)
                                 new_img_path = os.path.join(new_dataset_path, new_filename)
                                 
-                                print(f"📝 DEBUG - new_dataset_path: {new_dataset_path}")
-                                print(f"📝 DEBUG - new_filename: {new_filename}")
-                                print(f"📝 DEBUG - new_img_path completo: {new_img_path}")
-                                
                                 if action == 'copy':
                                     shutil.copy2(str(image_file), new_img_path)
                                 else:  # move
                                     shutil.move(str(image_file), new_img_path)
                                 
-                                # Copiar/mover etiquetas si existen
+                                # 🏷️ Copiar/mover etiquetas si existen (en subcarpeta labels/)
                                 if labels_path and labels_path.exists():
                                     label_file = labels_path / (image_file.stem + '.txt')
                                     if label_file.exists():
-                                        new_label_path = os.path.splitext(new_img_path)[0] + '.txt'
+                                        # Guardar en labels/ con el mismo nombre base que la imagen
+                                        new_label_filename = os.path.splitext(new_filename)[0] + '.txt'
+                                        new_label_path = os.path.join(labels_folder, new_label_filename)
+                                        
                                         if action == 'copy':
                                             shutil.copy2(str(label_file), new_label_path)
+                                            print(f"   🏷️ Etiqueta copiada: {label_file.name} -> {new_label_filename}")
                                         else:  # move
                                             shutil.move(str(label_file), new_label_path)
+                                            print(f"   🏷️ Etiqueta movida: {label_file.name} -> {new_label_filename}")
                                 
                                 processed_images += 1
                     else:
@@ -5477,16 +5743,36 @@ class AdvancedAnnotationSuite:
                                         
                                         print(f"✅ Imagen copiada exitosamente")
                                         
-                                        # Copiar/mover etiquetas si existen
-                                        label_file = image_file.with_suffix('.txt')
-                                        if label_file.exists():
-                                            new_label_path = os.path.splitext(new_img_path)[0] + '.txt'
+                                        # 🏷️ Copiar/mover etiquetas si existen (buscar en labels/ o mismo directorio)
+                                        label_file = None
+                                        
+                                        # Primero buscar en subcarpeta labels/ (estructura AutoDistill/YOLO)
+                                        labels_subdir = Path(dataset_path) / 'labels'
+                                        if labels_subdir.exists():
+                                            potential_label = labels_subdir / (image_file.stem + '.txt')
+                                            if potential_label.exists():
+                                                label_file = potential_label
+                                                print(f"🔍 Etiqueta encontrada en labels/: {potential_label.name}")
+                                        
+                                        # Si no se encontró, buscar en el mismo directorio que la imagen
+                                        if not label_file:
+                                            potential_label = image_file.with_suffix('.txt')
+                                            if potential_label.exists():
+                                                label_file = potential_label
+                                                print(f"🔍 Etiqueta encontrada en raíz: {potential_label.name}")
+                                        
+                                        if label_file:
+                                            # Guardar en labels/ con el mismo nombre base que la imagen
+                                            new_label_filename = os.path.splitext(new_filename)[0] + '.txt'
+                                            new_label_path = os.path.join(labels_folder, new_label_filename)
                                             print(f"🏷️ Copiando etiqueta: {label_file} -> {new_label_path}")
                                             if action == 'copy':
                                                 shutil.copy2(str(label_file), new_label_path)
                                             else:  # move
                                                 shutil.move(str(label_file), new_label_path)
                                             print(f"✅ Etiqueta copiada exitosamente")
+                                        else:
+                                            print(f"⚠️ No se encontró etiqueta para: {image_file.name}")
                                         
                                         processed_images += 1
                                         print(f"📊 Total procesadas hasta ahora: {processed_images}")
